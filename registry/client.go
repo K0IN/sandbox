@@ -31,6 +31,22 @@ type Layer struct {
 	Digest    string `json:"digest"`
 }
 
+type Config struct {
+	Env         []string `json:"Env"`
+	Cmd         []string `json:"Cmd"`
+	ArgsEscaped bool     `json:"argsEscaped"`
+	// onBuild
+}
+
+type ConfigFile struct {
+	Architecture string `json:"architecture"`
+	Config       Config `json:"config"`
+	Created      string `json:"created"`
+	// history      []string `json:"history"`
+	Os string `json:"os"`
+	// rootfs rootfs `json:"rootfs"`
+}
+
 // GetTags lists tags for the specified repository.
 func (c *DockerRegistryClient) GetTags(repository string) ([]string, error) {
 	// ... (same as before)
@@ -266,15 +282,16 @@ func extractLayer(filePath, destination string) error {
 		case tar.TypeSymlink:
 			// Handle symlinks
 			// if exists remove old symlink
-			if _, err := os.Stat(target); err == nil {
-				if err := os.Remove(target); err != nil {
-					return err
-				}
-			}
-
-			if err := os.Symlink(header.Linkname, target); err != nil {
-				return err
-			}
+			// if _, err := os.Stat(target); err == nil {
+			// 	if err := os.Remove(target); err != nil {
+			// 		return err
+			// 	}
+			// }
+			// link := header.Linkname
+			// println("Symlink:", link, "->", target)
+			// if err := os.Symlink(link, target); err != nil {
+			// 	return err
+			// }
 
 		}
 	}
@@ -298,6 +315,12 @@ func extractFile(tarReader *tar.Reader, header *tar.Header, filepath string) err
 
 func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, rootFsPath string) error {
 	// Ensure the root filesystem directory exists
+	if _, err := os.Stat(rootFsPath); err == nil {
+		if err := os.RemoveAll(rootFsPath); err != nil {
+			return err
+		}
+	}
+
 	if err := os.MkdirAll(rootFsPath, 0755); err != nil {
 		return err
 	}
@@ -334,11 +357,25 @@ func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, root
 	}
 
 	// Extract the image configuration
-	// configFile, err := client.DownloadLayer(repository, manifest.Config.Digest)
-	// if err != nil {
-	// 	return fmt.Errorf("error downloading image configuration: %w", err)
-	// }
-	//
-	// print("Config file:", configFile)
+	println("Extracting image configuration...", manifest.Config.Digest)
+	configFile, err := client.DownloadLayer(repository, manifest.Config.Digest)
+	if err == nil {
+		// parse the json file (configFile) and parse it to config struct
+		// var config ConfigFile
+		config := ConfigFile{}
+		fileContent, err := os.ReadFile(configFile)
+		if err != nil {
+			return fmt.Errorf("error reading config file %s: %w", configFile, err)
+		}
+		if err := json.Unmarshal(fileContent, &config); err != nil {
+			return fmt.Errorf("error parsing config file %s: %w", configFile, err)
+		}
+
+		fmt.Println("Config:", config)
+
+	} else {
+		println("Error downloading config file:", err)
+	}
+
 	return nil
 }
