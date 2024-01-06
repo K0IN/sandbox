@@ -63,9 +63,10 @@ func main() {
 	client := registry_client.NewDockerRegistryClient(registry_client.RegistryBaseURL, "", "")
 
 	image := "library/python"
-	tag := "alpine"
+	tag := "latest"
+	destination := "rootfs"
 
-	config, err := registry_client.ExtractAndAssembleImage(client, image, tag, "rootfs")
+	config, err := registry_client.ExtractAndAssembleImage(client, image, tag, destination)
 	if err != nil {
 		panic(err)
 	}
@@ -76,7 +77,7 @@ func main() {
 	err = container.ExecuteCommand(cmd, &container.ExecConfig{
 		Env:            config.Config.Env,
 		WorkDir:        "/",
-		Rootfs:         "rootfs",
+		Rootfs:         destination,
 		NameSpaceFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
 	})
 

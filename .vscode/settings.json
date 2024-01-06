@@ -1,5 +1,12 @@
 {
   "cSpell.words": [
+    "NEWIPC",
+    "NEWNET",
+    "NEWNS",
+    "NEWPID",
+    "NEWUSER",
+    "NEWUTS",
+    "Rootfs",
     "Workdir"
   ]
 }
