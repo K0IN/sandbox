@@ -5,6 +5,7 @@ import (
 	registry_client "myapp/registry"
 	container "myapp/simple-container"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -64,13 +65,16 @@ func main() {
 	image := "library/python"
 	tag := "alpine"
 
-	err := registry_client.ExtractAndAssembleImage(client, image, tag, "rootfs")
+	config, err := registry_client.ExtractAndAssembleImage(client, image, tag, "rootfs")
 	if err != nil {
 		panic(err)
 	}
 
-	err = container.ExecuteCommand("/bin/sh", &container.ExecConfig{
-		Env:            os.Environ(),
+	fmt.Println("Config:", config)
+
+	cmd := strings.Join(config.Config.Cmd, "")
+	err = container.ExecuteCommand(cmd, &container.ExecConfig{
+		Env:            config.Config.Env,
 		WorkDir:        "/",
 		Rootfs:         "rootfs",
 		NameSpaceFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,

@@ -31,19 +31,19 @@ type Layer struct {
 	Digest    string `json:"digest"`
 }
 
-type Config struct {
+type ContainerConfig struct {
 	Env         []string `json:"Env"`
 	Cmd         []string `json:"Cmd"`
 	ArgsEscaped bool     `json:"argsEscaped"`
 	// onBuild
 }
 
-type ConfigFile struct {
-	Architecture string `json:"architecture"`
-	Config       Config `json:"config"`
-	Created      string `json:"created"`
+type ConfigLayer struct {
+	Architecture string          `json:"architecture"`
+	Config       ContainerConfig `json:"config"`
+	Created      string          `json:"created"`
+	Os           string          `json:"os"`
 	// history      []string `json:"history"`
-	Os string `json:"os"`
 	// rootfs rootfs `json:"rootfs"`
 }
 
@@ -282,17 +282,16 @@ func extractLayer(filePath, destination string) error {
 		case tar.TypeSymlink:
 			// Handle symlinks
 			// if exists remove old symlink
-			// if _, err := os.Stat(target); err == nil {
-			// 	if err := os.Remove(target); err != nil {
-			// 		return err
-			// 	}
-			// }
-			// link := header.Linkname
-			// println("Symlink:", link, "->", target)
-			// if err := os.Symlink(link, target); err != nil {
-			// 	return err
-			// }
+			if _, err := os.Stat(target); err == nil {
+				if err := os.Remove(target); err != nil {
+					return err
+				}
+			}
 
+			link := header.Linkname
+			if err := os.Symlink(link, target); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -313,22 +312,22 @@ func extractFile(tarReader *tar.Reader, header *tar.Header, filepath string) err
 	return nil
 }
 
-func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, rootFsPath string) error {
+func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, rootFsPath string) (*ConfigLayer, error) {
 	// Ensure the root filesystem directory exists
 	if _, err := os.Stat(rootFsPath); err == nil {
 		if err := os.RemoveAll(rootFsPath); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if err := os.MkdirAll(rootFsPath, 0755); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Get the manifest for the specific image tag
 	manifest, err := client.GetManifest(repository, tag)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// print manifest
@@ -341,13 +340,13 @@ func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, root
 
 		layerFile, err := client.DownloadLayer(repository, layer.Digest)
 		if err != nil {
-			return fmt.Errorf("error downloading layer %s: %w", layer.Digest, err)
+			return nil, fmt.Errorf("error downloading layer %s: %w", layer.Digest, err)
 		}
 
 		// Extract layer
 		fmt.Printf("Extracting layer (%d) %s...\n", i, layer.Digest)
 		if err := extractLayer(layerFile, rootFsPath); err != nil {
-			return fmt.Errorf("error extracting layer %s: %w", layer.Digest, err)
+			return nil, fmt.Errorf("error extracting layer %s: %w", layer.Digest, err)
 		}
 
 		// Clean up the downloaded layer file
@@ -359,23 +358,17 @@ func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, root
 	// Extract the image configuration
 	println("Extracting image configuration...", manifest.Config.Digest)
 	configFile, err := client.DownloadLayer(repository, manifest.Config.Digest)
-	if err == nil {
-		// parse the json file (configFile) and parse it to config struct
-		// var config ConfigFile
-		config := ConfigFile{}
-		fileContent, err := os.ReadFile(configFile)
-		if err != nil {
-			return fmt.Errorf("error reading config file %s: %w", configFile, err)
-		}
-		if err := json.Unmarshal(fileContent, &config); err != nil {
-			return fmt.Errorf("error parsing config file %s: %w", configFile, err)
-		}
-
-		fmt.Println("Config:", config)
-
-	} else {
-		println("Error downloading config file:", err)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading image configuration: %w", err)
 	}
 
-	return nil
+	config := ConfigLayer{}
+	fileContent, err := os.ReadFile(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("error reading config file %s: %w", configFile, err)
+	}
+	if err := json.Unmarshal(fileContent, &config); err != nil {
+		return nil, fmt.Errorf("error parsing config file %s: %w", configFile, err)
+	}
+	return &config, nil
 }
