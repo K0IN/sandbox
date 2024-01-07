@@ -7,17 +7,19 @@ import (
 	"os"
 	"strings"
 	"syscall"
+
+	"github.com/akamensky/argparse"
 )
 
-type TryConfig struct {
-	// AllowNetwork bool
-	// AllowEnv     bool
-	Command  string
-	Workdir  *string
-	SkipDiff *bool
-}
+// Remove the TryConfig struct and replace it with individual parameters in the executeTry function.
+func executeTry(command string, workdir *string, skipDiff *bool) {
+	if command == "" {
+		command = os.Getenv("SHELL")
+		if command == "" {
+			command = "/bin/sh"
+		}
+	}
 
-func executeTry(config TryConfig) {
 	sandboxDir, err := os.MkdirTemp("", "sandbox")
 	if err != nil {
 		panic(fmt.Errorf("cannot create sandbox dir: %w", err))
@@ -34,44 +36,53 @@ func executeTry(config TryConfig) {
 		panic(fmt.Errorf("cannot mount overlayfs: %w", err))
 	}
 
-	if config.Workdir == nil {
+	if workdir == nil {
 		currentDir, err := os.Getwd()
 		if err == nil {
-			config.Workdir = &currentDir
+			workdir = &currentDir
 		}
 	}
 
 	exec := container.ExecConfig{
 		Env:            os.Environ(),
-		WorkDir:        *config.Workdir,
+		WorkDir:        *workdir,
 		Rootfs:         overlayFs.GetRootDir(),
 		NameSpaceFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
 	}
 
-	err = container.ExecuteCommand(config.Command, &exec)
+	err = container.ExecuteCommand(command, &exec)
 	if err != nil {
 		panic(err)
 	}
 
-	// if !*config.SkipDiff {
-	// 	overlayFs.ShowDiff()
-	// }
+	if !*skipDiff {
+		// 	overlayFs.ShowDiff()
+	}
 }
 
-func main() {
-
+func executeContainer(imageWithTag string) {
 	client := registry_client.NewDockerRegistryClient(registry_client.RegistryBaseURL, "", "")
+	imageWithTagSplit := strings.Split(imageWithTag, ":")
+	if len(imageWithTagSplit) != 2 {
+		panic(fmt.Errorf("invalid image with tag: %s", imageWithTag))
+	}
 
-	image := "library/python"
-	tag := "latest"
-	destination := "rootfs"
+	image := imageWithTagSplit[0]
+	tag := imageWithTagSplit[1]
+
+	destination, err := os.MkdirTemp("", "rootfs")
+	if err != nil {
+		panic(fmt.Errorf("cannot create container rootfs dir: %w", err))
+	}
+
+	fmt.Printf("starting image: %s, tag: %s, destination: %s\n", image, tag, destination)
 
 	config, err := registry_client.ExtractAndAssembleImage(client, image, tag, destination)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("Config:", config)
+	// fmt.Println("Config:", config)
 
 	cmd := strings.Join(config.Config.Cmd, "")
 	err = container.ExecuteCommand(cmd, &container.ExecConfig{
@@ -84,7 +95,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
 
+func main() {
 	//arguments
 	// --allow-network
 	// --allow-proc
@@ -100,74 +113,31 @@ func main() {
 	// --mount OR --overlay
 	// --mount-proc
 	// --mount-dev
+	fmt.Printf("user id %d\n", os.Getuid())
+	fmt.Printf("group id %d\n", os.Getgid())
+	parser := argparse.NewParser("sandbox", "run a command in a sandbox")
 
-	// parser := argparse.NewParser("sandbox", "run a command in a sandbox")
-	// tryCommand := parser.NewCommand("try", "execute a command inside a sandbox and review the changes")
-	// // allowNet := tryCommand.Flag("n", "allow-net", &argparse.Options{Required: false, Default: true, Help: "allow network"})
-	// // tryCommand.Flag("p", "allow-proc", &argparse.Options{Required: false, Default: true, Help: "allow proc"})
-	// // allowEnv := tryCommand.Flag("e", "allow-env", &argparse.Options{Required: false, Default: true, Help: "allow env"})
-	// workDir := tryCommand.String("c", "workdir", &argparse.Options{Required: false, Help: "workdir"})
-	// args := parser.StringPositional(&argparse.Options{Required: true, Help: "command to execute"})
-	// skipDiff := tryCommand.Flag("s", "skip-diff", &argparse.Options{Required: false, Default: false, Help: "skip diff"})
-	//
-	// // c2 := parser.NewCommand("container", "start a ocid container in the most cracked way possible")
-	//
-	// err := parser.Parse(os.Args)
-	// if err != nil {
-	// 	fmt.Print(parser.Usage(err))
-	// }
-	//
-	// if tryCommand.Happened() {
-	// 	config := TryConfig{
-	// 		// AllowNetwork: *allowNet,
-	// 		// AllowEnv:     *allowEnv,
-	// 		Command:  *args,
-	// 		Workdir:  workDir,
-	// 		SkipDiff: skipDiff,
-	// 	}
-	// 	executeTry(config)
-	// }
-	//
-	// // Finally print the collected string
-	// // fmt.Println(*s)
-	// //
-	// //
-	// //
-	// // argsWithProg := os.Args
-	// // argsWithoutProg := os.Args[1:]
-	// // if len(argsWithoutProg) < 1 {
-	// // 	fmt.Printf("Usage: %s <command>\n", argsWithProg[0])
-	// // 	fmt.Printf("Example: %s ls\n", argsWithProg[0])
-	// // 	os.Exit(1)
-	// // }
-	// //
-	// // sandboxDir, err := os.MkdirTemp("", "sandbox")
-	// // if err != nil {
-	// // 	panic(fmt.Errorf("cannot create sandbox dir: %w", err))
-	// // }
-	// //
-	// // fmt.Println("Created sandbox:", sandboxDir)
-	// //
-	// // fs, _ := overlayfs.CreateOverlayFs(sandboxDir) // todo -> use fuse instead of overlayfs
-	// // err = fs.Mount()
-	// // if err != nil {
-	// // 	panic(fmt.Errorf("cannot mount overlayfs: %w", err))
-	// // }
-	// //
-	// // defer func() {
-	// // 	fs.Unmount()
-	// // 	_ = os.RemoveAll(sandboxDir)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }()
-	//
-	// // execute the command
-	// err = ExecuteCommand(argsWithoutProg, fs.GetRootDir())
-	// if err != nil {
-	// 	panic(err)
-	// }
+	tryCommand := parser.NewCommand("try", "execute a command inside a sandbox and review the changes")
+	workDir := tryCommand.String("c", "workdir", &argparse.Options{Required: false, Help: "workdir"})
+	args := parser.StringPositional(&argparse.Options{Required: true, Help: "command to execute"})
+	skipDiff := tryCommand.Flag("s", "skip-diff", &argparse.Options{Required: false, Default: false, Help: "skip diff"})
 
-	// show diff
-	// fs.ShowDiff()
+	containerCommand := parser.NewCommand("container", "start a container in the most cracked way possible (please note that this is just chroot with a custom namespace, no overlayfs)")
+	imageWithTag := containerCommand.String("i", "image", &argparse.Options{Required: true, Help: "image with tag, example: library/python:latest"})
+
+	err := parser.Parse(os.Args)
+	if err != nil {
+		fmt.Print(parser.Usage(err))
+		os.Exit(1)
+	}
+
+	if tryCommand.Happened() {
+
+		executeTry(*args, workDir, skipDiff)
+	} else if containerCommand.Happened() {
+		executeContainer(*imageWithTag)
+	} else {
+		fmt.Print(parser.Usage(err))
+		os.Exit(1)
+	}
 }
