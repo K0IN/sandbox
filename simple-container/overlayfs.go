@@ -9,6 +9,8 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
+// todo @K0IN use fusefs instead of overlayfs to support rootless overlays
+
 type OverlayFs struct {
 	upperDir  string
 	workDir   string
@@ -68,9 +70,9 @@ func showFile(upperDir, rootFsPath string) {
 }
 
 func (o *OverlayFs) ShowDiff() {
-	showFile(o.upperDir, "/etc/hosts")
-	showFile(o.upperDir, "/etc/resolv.conf")
-	showFile(o.upperDir, "/etc/hostname")
+	// showFile(o.upperDir, "/etc/hosts")
+	// showFile(o.upperDir, "/etc/resolv.conf")
+	// showFile(o.upperDir, "/etc/hostname")
 }
 
 func (o *OverlayFs) GetRootDir() string {

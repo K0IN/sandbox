@@ -14,8 +14,18 @@ type ExecConfig struct {
 	NameSpaceFlags uintptr
 }
 
+func prepareCommand(command string, execConfig *ExecConfig) string {
+	hostName, err := os.Hostname()
+	if err != nil {
+		hostName = "unknown"
+	}
+
+	return fmt.Sprintf("hostname \"%s-%s\" && cd \"%s\" && %s", hostName, "sandbox", execConfig.WorkDir, command)
+
+}
+
 func ExecuteCommand(command string, execConfig *ExecConfig) error {
-	args := fmt.Sprintf("cd %s && %s", execConfig.WorkDir, command)
+	args := prepareCommand(command, execConfig)
 	// println("Executing command:", args)
 	cmd := exec.Command("/bin/sh", "-c", args)
 	cmd.Env = execConfig.Env
@@ -23,10 +33,11 @@ func ExecuteCommand(command string, execConfig *ExecConfig) error {
 	attr := syscall.SysProcAttr{
 		Chroot:     execConfig.Rootfs,
 		Cloneflags: execConfig.NameSpaceFlags,
+		// Unshareflags: ,
 		UidMappings: []syscall.SysProcIDMap{
 			{
 				ContainerID: 0,
-				HostID:      syscall.Getuid(),
+				HostID:      1000,
 				Size:        1,
 			},
 		},
@@ -56,5 +67,23 @@ func ExecuteCommand(command string, execConfig *ExecConfig) error {
 		return fmt.Errorf("command execution failed: %w", err)
 	}
 
+	return nil
+}
+
+// https://blog.scottlowe.org/2013/09/04/introducing-linux-network-namespaces/ and https://lwn.net/Articles/580893/
+func AddNetwork(name string, ip string) error {
+	// https://github.com/vishvananda/netlink
+
+	// ip link add veth0 type veth peer name veth1
+	// ip link set veth1 netns <pid>
+	// ip netns exec <pid> ip addr add
+	// ip netns exec <pid> ip link set veth1 up
+	// ip netns exec <pid> ip route add default via <ip>
+	return nil
+}
+
+func AddMount() error {
+	//sudo mount -o ro,noload /dev/sda1 /media/2tb
+	//  syscall.Mount("/dev/sda1", "/media/2tb", "ext4", syscall.MS_RDONLY, "")
 	return nil
 }
