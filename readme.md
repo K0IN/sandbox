@@ -4,5 +4,5 @@
 ## Install
 
 ```sh
-curl raw.githubusercontent.com/K0IN/sandbox/main/install.sh | sh
+curl https://raw.githubusercontent.com/K0IN/sandbox/main/install.sh | sh
 ```

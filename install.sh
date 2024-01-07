@@ -14,14 +14,19 @@ fi
 
 # Download the latest binary release of `sandbox`
 echo "Downloading sandbox from $URL..."
-curl -L -o sandbox "$URL"
+curl -L -o sandbox.tar.gz "$URL"
+
+# Extract the tarball
+tar -xzf sandbox.tar.gz
+
+# Remove the tarball
+rm sandbox.tar.gz
+
+# Move the binary to /usr/local/bin
+mv sandbox /usr/local/bin/sandbox
 
 # Ensure the binary is executable
 chmod +x sandbox
-
-# Move the binary to a location in the user's PATH (requires sudo for /usr/local/bin)
-echo "Installing sandbox to /usr/local/bin - you might be prompted for your password."
-sudo mv sandbox /usr/local/bin/
 
 # Verify that installation was successful
 if [ -x "$(command -v sandbox)" ]; then
