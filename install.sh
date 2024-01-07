@@ -1,35 +1,66 @@
 #!/bin/sh
 
-# This is the repository where `sandbox` is hosted
+# Define the GitHub repository.
 REPO="K0IN/sandbox"
 
-# Get the latest release from GitHub api
-URL=$(curl -s https://api.github.com/repos/$REPO/releases/latest | grep "browser_download_url" | cut -d '"' -f 4)
+# Find the architecture of the current system.
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)
+        ARCH="amd64"
+        ;;
+    arm*)
+        ARCH="arm"
+        ;;
+    aarch64)
+        ARCH="arm64"
+        ;;
+    *)
+        echo "Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
 
-# Check if the URL is non-empty
-if [ -z "$URL" ]; then
-    echo "Error: Unable to retrieve the latest release."
+# Define the base directory for temporary extraction.
+TMP_DIR=$(mktemp -d)
+
+# Use the GitHub API to get the download URL for the tarball of the latest release.
+TARBALL_URL=$(curl -s https://api.github.com/repos/$REPO/releases/latest |
+    grep "browser_download_url.*${ARCH}\.tar\.gz" |
+    cut -d '"' -f 4 | head -n 1)
+
+# Check if the tarball URL wasn't found.
+if [ -z "$TARBALL_URL" ]; then
+    echo "Error: Unable to retrieve the latest release tarball for architecture: $ARCH"
     exit 1
 fi
 
-# Download the latest binary release of `sandbox`
-echo "Downloading sandbox from $URL..."
-curl -L -o sandbox.tar.gz "$URL"
+# Download the tar.gz file.
+echo "Downloading sandbox for $ARCH from $TARBALL_URL..."
+curl -sSL -o "${TMP_DIR}/sandbox.tar.gz" "$TARBALL_URL"
 
-# Extract the tarball
-tar -xzf sandbox.tar.gz
+# Check if the download was successful.
+if [ $? -ne 0 ] || [ ! -f "${TMP_DIR}/sandbox.tar.gz" ]; then
+    echo "Error: Download failed."
+    rm -rf "$TMP_DIR"
+    exit 1
+fi
 
-# Remove the tarball
-rm sandbox.tar.gz
+# Extract the 'sandbox' binary from the tar.gz into the temporary directory.
+tar -xzf "${TMP_DIR}/sandbox.tar.gz" -C "$TMP_DIR"
 
-# Move the binary to /usr/local/bin
-mv sandbox /usr/local/bin/sandbox
+# Assuming the binary is named 'sandbox' and is located in the root of the tar directory.
+chmod +x "${TMP_DIR}/sandbox"
 
-# Ensure the binary is executable
-chmod +x sandbox
+echo "Installing sandbox to /usr/local/bin - you might be prompted for your password."
+# Move the binary to a location in the user's PATH.
+sudo mv "${TMP_DIR}/sandbox" /usr/local/bin/sandbox
 
-# Verify that installation was successful
-if [ -x "$(command -v sandbox)" ]; then
+# Cleanup the temporary directory.
+rm -rf "$TMP_DIR"
+
+# Verify that installation was successful.
+if command -v sandbox >/dev/null 2>&1; then
     echo "Installation successful. You can now run 'sandbox' from the command line."
 else
     echo "Error: sandbox was not installed correctly."
