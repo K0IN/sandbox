@@ -157,8 +157,10 @@ func (c *DockerRegistryClient) GetManifest(repository, tag string) (*Manifest, e
 	if err != nil {
 		return nil, err
 	}
+
 	// print raw manifest
-	fmt.Println("Raw manifest:", string(body))
+	// fmt.Println("Raw manifest:", string(body))
+
 	var manifest Manifest
 	if err := json.Unmarshal(body, &manifest); err != nil {
 		return nil, err
@@ -171,7 +173,7 @@ func (c *DockerRegistryClient) DownloadLayer(repository, digest string) (string,
 	layerDir := "layers"
 	layerFile := filepath.Join(layerDir, digest)
 	if _, err := os.Stat(layerFile); err == nil {
-		fmt.Println("Layer already downloaded:", layerFile)
+		// fmt.Println("Layer already downloaded:", layerFile)
 		return layerFile, nil
 	}
 
@@ -331,20 +333,28 @@ func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, root
 	}
 
 	// print manifest
-	fmt.Println("Manifest:", manifest)
+	// fmt.Println("Manifest:", manifest)
+
 	fmt.Printf("Found %d layers\n", len(manifest.Layers))
+	accumulatedSize := int64(0)
+	for i, layer := range manifest.Layers {
+		fmt.Printf("Layer (%d) %s (%d MB)\n", i, layer.Digest, layer.Size/1024/1024)
+		accumulatedSize += layer.Size
+	}
+	fmt.Printf("Total size: %d MB\n", accumulatedSize/1024/1024)
 
 	// Download all layers defined in the manifest
 	for i, layer := range manifest.Layers {
 		// Download layer
 
+		fmt.Printf("Downloading layer (%d) %s...\n", i, layer.Digest)
 		layerFile, err := client.DownloadLayer(repository, layer.Digest)
 		if err != nil {
 			return nil, fmt.Errorf("error downloading layer %s: %w", layer.Digest, err)
 		}
 
+		fmt.Printf("Extracting layer (%d) %s into %s\n", i, layer.Digest, rootFsPath)
 		// Extract layer
-		fmt.Printf("Extracting layer (%d) %s...\n", i, layer.Digest)
 		if err := extractLayer(layerFile, rootFsPath); err != nil {
 			return nil, fmt.Errorf("error extracting layer %s: %w", layer.Digest, err)
 		}
@@ -370,5 +380,7 @@ func ExtractAndAssembleImage(client *DockerRegistryClient, repository, tag, root
 	if err := json.Unmarshal(fileContent, &config); err != nil {
 		return nil, fmt.Errorf("error parsing config file %s: %w", configFile, err)
 	}
+
+	println("Successfully extracted image and configuration")
 	return &config, nil
 }
