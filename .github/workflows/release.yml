@@ -26,4 +26,8 @@ jobs:
         goversion: "https://dl.google.com/go/go1.21.5.linux-amd64.tar.gz"
         project_path: .
         binary_name: "sandbox"
+        sha256sum: TRUE
+        md5sum: TRUE
+        ldflags: "-s -w"
         # extra_files: LICENSE readme.md
+        # compress_assets: FALSE # default is TRUE
