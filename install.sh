@@ -54,7 +54,12 @@ chmod +x "${TMP_DIR}/sandbox"
 
 echo "Installing sandbox to /usr/local/bin - you might be prompted for your password."
 # Move the binary to a location in the user's PATH.
-sudo mv "${TMP_DIR}/sandbox" /usr/local/bin/sandbox
+
+if [ "$(id -u)" -eq 0 ]; then
+    mv "${TMP_DIR}/sandbox" /usr/local/bin/sandbox
+else
+    sudo mv "${TMP_DIR}/sandbox" /usr/local/bin/sandbox
+fi
 
 # Cleanup the temporary directory.
 rm -rf "$TMP_DIR"
