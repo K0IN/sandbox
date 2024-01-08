@@ -1,5 +1,7 @@
 {
   "cSpell.words": [
+    "Cloneflags",
+    "DOAS",
     "goarch",
     "NEWIPC",
     "NEWNET",
@@ -8,6 +10,7 @@
     "NEWUSER",
     "NEWUTS",
     "Rootfs",
+    "Unshareflags",
     "wangyoucao",
     "Workdir"
   ]
