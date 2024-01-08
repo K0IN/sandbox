@@ -5,8 +5,6 @@ import (
 	"os"
 	"path"
 	"syscall"
-
-	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 // todo @K0IN use fusefs instead of overlayfs to support rootless overlays
@@ -49,25 +47,25 @@ func (o *OverlayFs) Unmount() error {
 	return syscall.Unmount(o.MergedDir, syscall.MNT_FORCE)
 }
 
-func showFile(upperDir, rootFsPath string) {
-	dmp := diffmatchpatch.New()
-
-	upperFilePath := path.Join(upperDir, rootFsPath)
-	rootFsFilePath := path.Join("/", rootFsPath)
-
-	text1, err := os.ReadFile(upperFilePath)
-	if err != nil {
-		panic(err)
-	}
-
-	text2, err := os.ReadFile(rootFsFilePath)
-	if err != nil {
-		panic(err)
-	}
-
-	diffs := dmp.DiffMain(string(text1), string(text2), false)
-	fmt.Println(dmp.DiffPrettyText(diffs))
-}
+// func showFile(upperDir, rootFsPath string) {
+// 	dmp := diffmatchpatch.New()
+//
+// 	upperFilePath := path.Join(upperDir, rootFsPath)
+// 	rootFsFilePath := path.Join("/", rootFsPath)
+//
+// 	text1, err := os.ReadFile(upperFilePath)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+//
+// 	text2, err := os.ReadFile(rootFsFilePath)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+//
+// 	diffs := dmp.DiffMain(string(text1), string(text2), false)
+// 	fmt.Println(dmp.DiffPrettyText(diffs))
+// }
 
 func (o *OverlayFs) ShowDiff() {
 	// showFile(o.upperDir, "/etc/hosts")
