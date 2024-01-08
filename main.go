@@ -43,11 +43,18 @@ func executeTry(command string, workdir *string, skipDiff *bool) {
 		}
 	}
 
+	uid, gid, err := container.GetOriginalUser()
+	if err != nil {
+		panic(fmt.Errorf("cannot get original user: %w", err))
+	}
+
 	exec := container.ExecConfig{
 		Env:            os.Environ(),
 		WorkDir:        *workdir,
 		Rootfs:         overlayFs.GetRootDir(),
 		NameSpaceFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
+		HostUid:        uid,
+		HostGid:        gid,
 	}
 
 	err = container.ExecuteCommand(command, &exec)
@@ -55,9 +62,9 @@ func executeTry(command string, workdir *string, skipDiff *bool) {
 		panic(err)
 	}
 
-	if !*skipDiff {
-		// 	overlayFs.ShowDiff()
-	}
+	// if !*skipDiff {
+	// 	overlayFs.ShowDiff()
+	// }
 }
 
 func executeContainer(imageWithTag string) {
@@ -132,7 +139,6 @@ func main() {
 	}
 
 	if tryCommand.Happened() {
-
 		executeTry(*args, workDir, skipDiff)
 	} else if containerCommand.Happened() {
 		executeContainer(*imageWithTag)

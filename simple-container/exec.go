@@ -12,6 +12,8 @@ type ExecConfig struct {
 	WorkDir        string
 	Rootfs         string
 	NameSpaceFlags uintptr
+	HostUid        int
+	HostGid        int
 }
 
 func prepareCommand(command string, execConfig *ExecConfig) string {
@@ -25,6 +27,7 @@ func prepareCommand(command string, execConfig *ExecConfig) string {
 }
 
 func ExecuteCommand(command string, execConfig *ExecConfig) error {
+
 	args := prepareCommand(command, execConfig)
 	// println("Executing command:", args)
 	cmd := exec.Command("/bin/sh", "-c", args)
@@ -34,20 +37,8 @@ func ExecuteCommand(command string, execConfig *ExecConfig) error {
 		Chroot:     execConfig.Rootfs,
 		Cloneflags: execConfig.NameSpaceFlags,
 		// Unshareflags: ,
-		UidMappings: []syscall.SysProcIDMap{
-			{
-				ContainerID: 0,
-				HostID:      1000,
-				Size:        1,
-			},
-		},
-		GidMappings: []syscall.SysProcIDMap{
-			{
-				ContainerID: 0,
-				HostID:      syscall.Getgid(),
-				Size:        1,
-			},
-		},
+		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: execConfig.HostUid, Size: 1}},
+		GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: execConfig.HostGid, Size: 1}},
 	}
 
 	// if err := syscall.Mount("proc", chroot+"/proc", "proc", 0, ""); err != nil {
