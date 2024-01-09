@@ -1,22 +1,98 @@
-package fuse-fs
+package fuse_overlay_fs
 
 //go:generate bash ./build.sh
 
 import (
 	_ "embed"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
+	"path"
 )
 
 //go:embed fuse-overlayfs-bin
 var fuseOverlayFS []byte
 
-func main() {
-	// write the file to disk
-	ioutil.WriteFile("fuse-overlayfs-bin-test", fuseOverlayFS, 0755)
-	res, err := exec.Command("./fuse-overlayfs-bin-test", "-h").CombinedOutput()
+type OverlayFs struct {
+	upperDir   string
+	workDir    string
+	MergedDir  string
+	binaryPath string
+}
+
+func CreateOverlayFs(tmpFolder string) (*OverlayFs, error) {
+	o := &OverlayFs{}
+	tmpDir, err := ioutil.TempDir("", "fuse-overlayfs")
 	if err != nil {
 		panic(err)
 	}
-	println(string(res))
+	tmpBinPath := path.Join(tmpDir, "fuse-overlayfs-bin")
+	err = ioutil.WriteFile(tmpBinPath, fuseOverlayFS, 0755)
+	if err != nil {
+		panic(err)
+	}
+	o.binaryPath = tmpBinPath
+
+	o.MergedDir = path.Join(tmpFolder, "merged")
+	o.upperDir = path.Join(tmpFolder, "upper")
+	o.workDir = path.Join(tmpFolder, "work")
+	return o, nil
+}
+
+func (o *OverlayFs) Mount() error {
+	err := os.MkdirAll(o.upperDir, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.MkdirAll(o.workDir, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.MkdirAll(o.MergedDir, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	mounts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", "/", o.upperDir, o.workDir)
+	_, err = exec.Command(o.binaryPath, "-o", mounts, o.MergedDir).CombinedOutput()
+
+	return err
+}
+
+func (o *OverlayFs) Unmount() error {
+	exec.Command("fusermount", "-u", "/home/k0in/merged").Run()
+	return nil
+}
+
+// func showFile(upperDir, rootFsPath string) {
+// 	dmp := diffmatchpatch.New()
+//
+// 	upperFilePath := path.Join(upperDir, rootFsPath)
+// 	rootFsFilePath := path.Join("/", rootFsPath)
+//
+// 	text1, err := os.ReadFile(upperFilePath)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+//
+// 	text2, err := os.ReadFile(rootFsFilePath)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+//
+// 	diffs := dmp.DiffMain(string(text1), string(text2), false)
+// 	fmt.Println(dmp.DiffPrettyText(diffs))
+// }
+
+func (o *OverlayFs) ShowDiff() {
+	// showFile(o.upperDir, "/etc/hosts")
+	// showFile(o.upperDir, "/etc/resolv.conf")
+	// showFile(o.upperDir, "/etc/hostname")
+}
+
+func (o *OverlayFs) GetRootDir() string {
+	return o.MergedDir
 }
