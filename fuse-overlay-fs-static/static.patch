@@ -1,0 +1,762 @@
+diff --git a/main.c b/main.c
+index f4e7c7c..d60b8f1 100644
+--- a/main.c
++++ b/main.c
+@@ -5620,301 +5620,414 @@ load_default_plugins ()
+ }
+ 
+ int
+-main (int argc, char *argv[])
+-{
+-  struct fuse_session *se;
+-  struct fuse_cmdline_opts opts;
+-  char **newargv = get_new_args (&argc, argv);
+-  struct ovl_data lo = {
+-    .debug = 0,
+-    .uid_mappings = NULL,
+-    .gid_mappings = NULL,
+-    .uid_str = NULL,
+-    .gid_str = NULL,
+-    .root = NULL,
+-    .lowerdir = NULL,
+-    .redirect_dir = NULL,
+-    .mountpoint = NULL,
+-    .fsync = 1,
+-    .noacl = 0,
+-    .squash_to_uid = -1,
+-    .squash_to_gid = -1,
+-    .static_nlink = 0,
+-    .xattr_permissions = 0,
+-    .euid = geteuid (),
+-    .timeout = 1000000000.0,
+-    .timeout_str = NULL,
+-    .writeback = 1,
+-    .volatile_mode = 0,
+-  };
+-  struct fuse_loop_config fuse_conf = {
+-    .clone_fd = 1,
+-    .max_idle_threads = 10,
+-  };
+-  int ret = -1;
+-  cleanup_layer struct ovl_layer *layers = NULL;
+-  struct ovl_layer *tmp_layer = NULL;
+-  struct fuse_args args = FUSE_ARGS_INIT (argc, newargv);
++fuse_overlayfs_main (int argc, char *argv[])
++{
++struct fuse_session *se;
++struct fuse_cmdline_opts opts;
++char **newargv = get_new_args (&argc, argv);
++struct ovl_data lo = {
++.debug = 0,
++.uid_mappings = NULL,
++.gid_mappings = NULL,
++.uid_str = NULL,
++.gid_str = NULL,
++.root = NULL,
++.lowerdir = NULL,
++.redirect_dir = NULL,
++.mountpoint = NULL,
++.fsync = 1,
++.noacl = 0,
++.squash_to_uid = -1,
++.squash_to_gid = -1,
++.static_nlink = 0,
++.xattr_permissions = 0,
++.euid = geteuid (),
++.timeout = 1000000000.0,
++.timeout_str = NULL,
++.writeback = 1,
++.volatile_mode = 0,
++};
++struct fuse_loop_config fuse_conf = {
++.clone_fd = 1,
++.max_idle_threads = 10,
++};
++int ret = -1;
++cleanup_layer struct ovl_layer *layers = NULL;
++struct ovl_layer *tmp_layer = NULL;
++struct fuse_args args = FUSE_ARGS_INIT (argc, newargv);
+ 
+-  memset (&opts, 0, sizeof (opts));
+-  if (fuse_opt_parse (&args, &lo, ovl_opts, fuse_opt_proc) == -1)
+-    error (EXIT_FAILURE, 0, "error parsing options");
+-  if (fuse_parse_cmdline (&args, &opts) != 0)
+-    error (EXIT_FAILURE, 0, "error parsing cmdline");
++memset (&opts, 0, sizeof (opts));
++if (fuse_opt_parse (&args, &lo, ovl_opts, fuse_opt_proc) == -1)
++error (EXIT_FAILURE, 0, "error parsing options");
++if (fuse_parse_cmdline (&args, &opts) != 0)
++error (EXIT_FAILURE, 0, "error parsing cmdline");
+ 
+-  if (opts.mountpoint)
+-    free (opts.mountpoint);
++if (opts.mountpoint)
++free (opts.mountpoint);
+ 
+-  read_overflowids ();
++read_overflowids ();
+ 
+-  pthread_mutex_init (&lock, PTHREAD_MUTEX_DEFAULT);
++pthread_mutex_init (&lock, PTHREAD_MUTEX_DEFAULT);
+ 
+-  if (opts.show_help)
+-    {
+-      printf ("usage: %s [options] <mountpoint>\n\n", argv[0]);
+-      fuse_cmdline_help ();
+-      fuse_lowlevel_help ();
+-      exit (EXIT_SUCCESS);
+-    }
+-  else if (opts.show_version)
+-    {
+-      printf ("fuse-overlayfs: version %s\n", PACKAGE_VERSION);
+-      printf ("FUSE library version %s\n", fuse_pkgversion ());
+-      fuse_lowlevel_version ();
+-      exit (EXIT_SUCCESS);
+-    }
++if (opts.show_help)
++{
++printf ("usage: %s [options] <mountpoint>\n\n", argv[0]);
++fuse_cmdline_help ();
++fuse_lowlevel_help ();
++// exit (EXIT_SUCCESS);
++}
++else if (opts.show_version)
++{
++printf ("fuse-overlayfs: version %s\n", PACKAGE_VERSION);
++printf ("FUSE library version %s\n", fuse_pkgversion ());
++fuse_lowlevel_version ();
++// exit (EXIT_SUCCESS);
++}
+ 
+-  lo.uid = geteuid ();
+-  lo.gid = getegid ();
++lo.uid = geteuid ();
++lo.gid = getegid ();
+ 
+-  if (lo.redirect_dir && strcmp (lo.redirect_dir, "off"))
+-    error (EXIT_FAILURE, 0, "fuse-overlayfs only supports redirect_dir=off");
++if (lo.redirect_dir && strcmp (lo.redirect_dir, "off"))
++error (EXIT_FAILURE, 0, "fuse-overlayfs only supports redirect_dir=off");
+ 
+-  if (lo.mountpoint == NULL)
+-    error (EXIT_FAILURE, 0, "no mountpoint specified");
++if (lo.mountpoint == NULL)
++error (EXIT_FAILURE, 0, "no mountpoint specified");
+ 
+-  if (lo.upperdir != NULL)
+-    {
+-      cleanup_free char *full_path = NULL;
++if (lo.upperdir != NULL)
++{
++cleanup_free char *full_path = NULL;
+ 
+-      full_path = realpath (lo.upperdir, NULL);
+-      if (full_path == NULL)
+-        error (EXIT_FAILURE, errno, "cannot retrieve path for %s", lo.upperdir);
+ 
+-      lo.upperdir = strdup (full_path);
+-      if (lo.upperdir == NULL)
+-        error (EXIT_FAILURE, errno, "cannot allocate memory");
+-    }
++  full_path = realpath (lo.upperdir, NULL);
+ 
+-  set_limits ();
+-  check_can_mknod (&lo);
+-  check_writeable_proc ();
++  if (full_path == NULL)
+ 
+-  if (lo.volatile_mode)
+-    lo.fsync = 0;
++    error (EXIT_FAILURE, errno, "cannot retrieve path for %s", lo.upperdir);
+ 
+-  if (lo.debug)
+-    {
+-      fprintf (stderr, "uid=%s\n", lo.uid_str ?: "unchanged");
+-      fprintf (stderr, "gid=%s\n", lo.gid_str ?: "unchanged");
+-      fprintf (stderr, "upperdir=%s\n", lo.upperdir ? lo.upperdir : "NOT USED");
+-      fprintf (stderr, "workdir=%s\n", lo.workdir ? lo.workdir : "NOT USED");
+-      fprintf (stderr, "lowerdir=%s\n", lo.lowerdir);
+-      fprintf (stderr, "mountpoint=%s\n", lo.mountpoint);
+-      fprintf (stderr, "plugins=%s\n", lo.plugins ? lo.plugins : "<none>");
+-      fprintf (stderr, "fsync=%s\n", lo.fsync ? "enabled" : "disabled");
+-    }
+ 
+-  lo.uid_mappings = lo.uid_str ? read_mappings (lo.uid_str) : NULL;
+-  lo.gid_mappings = lo.gid_str ? read_mappings (lo.gid_str) : NULL;
+ 
+-  errno = 0;
+-  if (lo.timeout_str)
+-    {
+-      lo.timeout = strtod (lo.timeout_str, NULL);
+-      if (errno == ERANGE)
+-        error (EXIT_FAILURE, errno, "cannot convert %s", lo.timeout_str);
+-    }
++  lo.upperdir = strdup (full_path);
+ 
+-  if (lo.plugins == NULL)
+-    lo.plugins = load_default_plugins ();
++  if (lo.upperdir == NULL)
+ 
+-  lo.plugins_ctx = load_plugins (lo.plugins);
++    error (EXIT_FAILURE, errno, "cannot allocate memory");
+ 
+-  layers = read_dirs (&lo, lo.lowerdir, true, NULL);
+-  if (layers == NULL)
+-    {
+-      error (EXIT_FAILURE, errno, "cannot read lower dirs");
+-    }
++}
++set_limits ();
++check_can_mknod (&lo);
++check_writeable_proc ();
+ 
+-  if (lo.upperdir != NULL)
+-    {
+-      tmp_layer = read_dirs (&lo, lo.upperdir, false, layers);
+-      if (tmp_layer == NULL)
+-        error (EXIT_FAILURE, errno, "cannot read upper dir");
+-      layers = tmp_layer;
+-    }
++if (lo.volatile_mode)
++lo.fsync = 0;
+ 
+-  lo.layers = layers;
++if (true)
++{
++fprintf (stderr, "uid=%s\n", lo.uid_str ?: "unchanged");
++fprintf (stderr, "gid=%s\n", lo.gid_str ?: "unchanged");
++fprintf (stderr, "upperdir=%s\n", lo.upperdir ? lo.upperdir : "NOT USED");
++fprintf (stderr, "workdir=%s\n", lo.workdir ? lo.workdir : "NOT USED");
++fprintf (stderr, "lowerdir=%s\n", lo.lowerdir);
++fprintf (stderr, "mountpoint=%s\n", lo.mountpoint);
++fprintf (stderr, "plugins=%s\n", lo.plugins ? lo.plugins : "<none>");
++fprintf (stderr, "fsync=%s\n", lo.fsync ? "enabled" : "disabled");
++}
+ 
+-  for (tmp_layer = layers; ! lo.noacl && tmp_layer; tmp_layer = tmp_layer->next)
+-    {
+-      if (! tmp_layer->ds->support_acls (tmp_layer))
+-        lo.noacl = 1;
+-    }
++lo.uid_mappings = lo.uid_str ? read_mappings (lo.uid_str) : NULL;
++lo.gid_mappings = lo.gid_str ? read_mappings (lo.gid_str) : NULL;
++
++errno = 0;
++if (lo.timeout_str)
++{
++lo.timeout = strtod (lo.timeout_str, NULL);
++if (errno == ERANGE)
++error (EXIT_FAILURE, errno, "cannot convert %s", lo.timeout_str);
++}
++
++if (lo.plugins == NULL)
++lo.plugins = load_default_plugins ();
++
++lo.plugins_ctx = load_plugins (lo.plugins);
++
++layers = read_dirs (&lo, lo.lowerdir, true, NULL);
++if (layers == NULL)
++{
++error (EXIT_FAILURE, errno, "cannot read lower dirs");
++}
++
++if (lo.upperdir != NULL)
++{
++tmp_layer = read_dirs (&lo, lo.upperdir, false, layers);
++if (tmp_layer == NULL)
++error (EXIT_FAILURE, errno, "cannot read upper dir");
++layers = tmp_layer;
++}
++
++lo.layers = layers;
++
++for (tmp_layer = layers; ! lo.noacl && tmp_layer; tmp_layer = tmp_layer->next)
++{
++if (! tmp_layer->ds->support_acls (tmp_layer))
++lo.noacl = 1;
++}
++
++if (lo.upperdir)
++{
++if (lo.xattr_permissions)
++{
++const char *name = NULL;
++char data[64];
++ssize_t s;
++if (lo.xattr_permissions == 1)
++{
++get_upper_layer (&lo)->stat_override_mode = STAT_OVERRIDE_PRIVILEGED;
++name = XATTR_PRIVILEGED_OVERRIDE_STAT;
++}
++else if (lo.xattr_permissions == 2)
++{
++get_upper_layer (&lo)->stat_override_mode = STAT_OVERRIDE_USER;
++name = XATTR_OVERRIDE_STAT;
++}
++else
++error (EXIT_FAILURE, 0, "invalid value for xattr_permissions");
++
++
++      s = fgetxattr (get_upper_layer (&lo)->fd, name, data, sizeof (data));
++
++      if (s < 0)
+ 
+-  if (lo.upperdir)
+-    {
+-      if (lo.xattr_permissions)
+         {
+-          const char *name = NULL;
+-          char data[64];
+-          ssize_t s;
+-          if (lo.xattr_permissions == 1)
+-            {
+-              get_upper_layer (&lo)->stat_override_mode = STAT_OVERRIDE_PRIVILEGED;
+-              name = XATTR_PRIVILEGED_OVERRIDE_STAT;
+-            }
+-          else if (lo.xattr_permissions == 2)
+-            {
+-              get_upper_layer (&lo)->stat_override_mode = STAT_OVERRIDE_USER;
+-              name = XATTR_OVERRIDE_STAT;
+-            }
+-          else
+-            error (EXIT_FAILURE, 0, "invalid value for xattr_permissions");
+ 
+-          s = fgetxattr (get_upper_layer (&lo)->fd, name, data, sizeof (data));
+-          if (s < 0)
++          bool found = false;
++
++          struct ovl_layer *l;
++
++
++          if (errno != ENODATA)
++
++            error (EXIT_FAILURE, errno, "read xattr `%s` from upperdir", name);
++
++ 
++
++          for (l = get_lower_layers (&lo); l; l = l->next)
++
+             {
+-              bool found = false;
+-              struct ovl_layer *l;
+ 
+-              if (errno != ENODATA)
+-                error (EXIT_FAILURE, errno, "read xattr `%s` from upperdir", name);
++              s = fgetxattr (l->fd, name, data, sizeof (data));
++
++              if (s < 0 && errno != ENODATA)
++
++                error (EXIT_FAILURE, errno, "fgetxattr mode from lower layer");
++
++              if (s < 0 && lo.xattr_permissions == 2)
+ 
+-              for (l = get_lower_layers (&lo); l; l = l->next)
+                 {
+-                  s = fgetxattr (l->fd, name, data, sizeof (data));
+-                  if (s < 0 && errno != ENODATA)
++
++                  s = fgetxattr (l->fd, XATTR_OVERRIDE_CONTAINERS_STAT, data, sizeof (data));
++
++                 if (s < 0 && errno != ENODATA)
++
+                     error (EXIT_FAILURE, errno, "fgetxattr mode from lower layer");
+-                  if (s < 0 && lo.xattr_permissions == 2)
+-                    {
+-                      s = fgetxattr (l->fd, XATTR_OVERRIDE_CONTAINERS_STAT, data, sizeof (data));
+-                      if (s < 0 && errno != ENODATA)
+-                        error (EXIT_FAILURE, errno, "fgetxattr mode from lower layer");
+-                    }
+-                  if (s > 0)
+-                    {
+-                      ret = fsetxattr (get_upper_layer (&lo)->fd, name, data, s, 0);
+-                      if (ret < 0)
+-                        error (EXIT_FAILURE, errno, "fsetxattr mode to upper layer");
+-                      found = true;
+-                      break;
+-                    }
++
+                 }
+-              if (! found)
++
++              if (s > 0)
++
+                 {
+-                  /* If the mode is missing, set a standard value.  */
+-                  ret = write_permission_xattr (&lo, get_upper_layer (&lo)->fd, lo.upperdir, 0, 0, 0555);
++
++                  ret = fsetxattr (get_upper_layer (&lo)->fd, name, data, s, 0);
++
+                   if (ret < 0)
+-                    error (EXIT_FAILURE, errno, "write xattr `%s` to upperdir", name);
++
++                    error (EXIT_FAILURE, errno, "fsetxattr mode to upper layer");
++
++                  found = true;
++
++                  break;
++
+                 }
++
+             }
++
++          if (! found)
++
++            {
++
++              /* If the mode is missing, set a standard value.  */
++
++             ret = write_permission_xattr (&lo, get_upper_layer (&lo)->fd, lo.upperdir, 0, 0, 0555);
++
++              if (ret < 0)
++
++                error (EXIT_FAILURE, errno, "write xattr `%s` to upperdir", name);
++
++            }
++
+         }
++
+     }
+ 
+-  lo.inodes = hash_initialize (2048, NULL, node_inode_hasher, node_inode_compare, inode_free);
++}
+ 
+-  lo.root = load_dir (&lo, NULL, lo.layers, ".", "");
+-  if (lo.root == NULL)
+-    error (EXIT_FAILURE, errno, "cannot read upper dir");
+-  lo.root->ino->lookups = 2;
++ 
++lo.inodes = hash_initialize (2048, NULL, node_inode_hasher, node_inode_compare, inode_free);
+ 
+-  if (lo.workdir == NULL && lo.upperdir != NULL)
+-    error (EXIT_FAILURE, 0, "workdir not specified");
++lo.root = load_dir (&lo, NULL, lo.layers, ".", "");
++if (lo.root == NULL)
++error (EXIT_FAILURE, errno, "cannot read upper dir");
++lo.root->ino->lookups = 2;
+ 
+-  if (lo.workdir)
+-    {
+-      int dfd;
+-      cleanup_free char *path = NULL;
++if (lo.workdir == NULL && lo.upperdir != NULL)
++error (EXIT_FAILURE, 0, "workdir not specified");
+ 
+-      path = realpath (lo.workdir, NULL);
+-      if (path == NULL)
+-        goto err_out1;
+-      mkdir (path, 0700);
+-      path = realloc (path, strlen (path) + strlen ("/work") + 1);
+-      if (! path)
+-        error (EXIT_FAILURE, errno, "allocating workdir path");
+-      strcat (path, "/work");
+-      mkdir (path, 0700);
+-      free (lo.workdir);
+-      lo.workdir = strdup (path);
+-      if (lo.workdir == NULL)
+-        error (EXIT_FAILURE, errno, "allocating workdir path");
++if (lo.workdir)
++{
++int dfd;
++cleanup_free char *path = NULL;
+ 
+-      lo.workdir_fd = open (lo.workdir, O_DIRECTORY);
+-      if (lo.workdir_fd < 0)
+-        error (EXIT_FAILURE, errno, "cannot open workdir");
+ 
+-      dfd = dup (lo.workdir_fd);
+-      if (dfd < 0)
+-        error (EXIT_FAILURE, errno, "dup workdir file descriptor");
+-      empty_dirfd (dfd);
+-    }
++  path = realpath (lo.workdir, NULL);
+ 
+-  umask (0);
+-  disable_locking = ! lo.threaded;
++  if (path == NULL)
+ 
+-  se = fuse_session_new (&args, &ovl_oper, sizeof (ovl_oper), &lo);
+-  lo.se = se;
+-  if (se == NULL)
+-    {
+-      error (0, errno, "cannot create FUSE session");
+-      goto err_out1;
+-    }
+-  if (fuse_set_signal_handlers (se) != 0)
+-    {
+-      error (0, errno, "cannot set signal handler");
+-      goto err_out2;
+-    }
++    goto err_out1;
+ 
+-  signal (SIGUSR1, print_stats);
++  mkdir (path, 0700);
+ 
+-  if (fuse_session_mount (se, lo.mountpoint) != 0)
+-    {
+-      error (0, errno, "cannot mount");
+-      goto err_out3;
+-    }
+-  fuse_daemonize (opts.foreground);
++  path = realloc (path, strlen (path) + strlen ("/work") + 1);
+ 
+-  if (lo.threaded)
+-    ret = fuse_session_loop_mt (se, &fuse_conf);
+-  else
+-    ret = fuse_session_loop (se);
++  if (! path)
++
++    error (EXIT_FAILURE, errno, "allocating workdir path");
++
++  strcat (path, "/work");
++
++  mkdir (path, 0700);
++
++  free (lo.workdir);
+ 
+-  fuse_session_unmount (se);
++  lo.workdir = strdup (path);
++
++  if (lo.workdir == NULL)
++
++    error (EXIT_FAILURE, errno, "allocating workdir path");
++
++ 
++
++  lo.workdir_fd = open (lo.workdir, O_DIRECTORY);
++
++  if (lo.workdir_fd < 0)
++
++    error (EXIT_FAILURE, errno, "cannot open workdir");
++
++  dfd = dup (lo.workdir_fd);
++
++  if (dfd < 0)
++
++    error (EXIT_FAILURE, errno, "dup workdir file descriptor");
++
++  empty_dirfd (dfd);
++
++}
++umask (0);
++disable_locking = ! lo.threaded;
++
++se = fuse_session_new (&args, &ovl_oper, sizeof (ovl_oper), &lo);
++lo.se = se;
++if (se == NULL)
++{
++error (0, errno, "cannot create FUSE session");
++goto err_out1;
++}
++if (fuse_set_signal_handlers (se) != 0)
++{
++error (0, errno, "cannot set signal handler");
++goto err_out2;
++}
++
++// signal (SIGUSR1, print_stats);
++
++if (fuse_session_mount (se, lo.mountpoint) != 0)
++{
++error (0, errno, "cannot mount");
++goto err_out3;
++}
++
++fuse_daemonize (1);
++printf("--> mounting %s on %s\n", lo.lowerdir, lo.mountpoint);
++// if (false)
++// ret = fuse_session_loop_mt (se, &fuse_conf);
++// else
++printf("--> fuse_session_loop \n");
++ret = fuse_session_loop (se);
++
++printf("--> fuse_session_unmount \n");
++fuse_session_unmount (se);
+ err_out3:
+-  fuse_remove_signal_handlers (se);
++fuse_remove_signal_handlers (se);
+ err_out2:
+-  fuse_session_destroy (se);
++fuse_session_destroy (se);
+ err_out1:
+ 
+-  for (tmp_layer = lo.layers; tmp_layer; tmp_layer = tmp_layer->next)
+-    tmp_layer->ds->cleanup (tmp_layer);
++for (tmp_layer = lo.layers; tmp_layer; tmp_layer = tmp_layer->next)
++tmp_layer->ds->cleanup (tmp_layer);
+ 
+-  node_mark_all_free (lo.root);
++node_mark_all_free (lo.root);
+ 
+-  hash_free (lo.inodes);
++hash_free (lo.inodes);
+ 
+-  plugin_free_all (lo.plugins_ctx);
++plugin_free_all (lo.plugins_ctx);
+ 
+-  free_mapping (lo.uid_mappings);
+-  free_mapping (lo.gid_mappings);
++free_mapping (lo.uid_mappings);
++free_mapping (lo.gid_mappings);
+ 
+-  close (lo.workdir_fd);
++close (lo.workdir_fd);
+ 
+-  fuse_opt_free_args (&args);
++fuse_opt_free_args (&args);
+ 
+-  exit (ret ? EXIT_FAILURE : EXIT_SUCCESS);
+-  return 1;
++// exit (ret ? EXIT_FAILURE : EXIT_SUCCESS);
++return 0;
++}
++
++// Adapted simplified function to expose in a shared library
++int initialize_fuse_overlayfs(const char *mountpoint, const char *lowerdir, const char *upperdir, const char *workdir) {
++// ./fuse-overlayfs -t overlay overlay -o lowerdir=/home/k0in/rootfs,upperdir=/home/k0in/path/to/upper,workdir=/home/k0in/path/to/work /home/k0in/path/to/merged
++char args[1337] = { 0 };
++sprintf(args, "lowerdir=%s,upperdir=%s,workdir=%s", lowerdir, upperdir, workdir);
++// fuse-overlayfs -o lowerdir=lowerdir/a,upperdir=up,workdir=workdir merged
++
++char *new_argv[] = {
++    "fuse-overlayfs",      // argv[0], command name 
++    "-o", args,
++    mountpoint
++};
++int new_argc = sizeof(new_argv) / sizeof(new_argv[0]);
++
++return fuse_overlayfs_main(new_argc, new_argv);
+ }
++
++int run_async()
++{
++  struct fuse_buf fbuf = {0};
++  while (!should_exit()) { // should_exit() is your custom condition check
++    memset(&fbuf, 0, sizeof(fbuf));
++
++    // Receive a request
++    int res = fuse_session_receive_buf(se, &fbuf, NULL);
++    if (res == -EINTR) {
++        // Interrupted system call, try again
++        continue;
++    } else if (res <= 0) {
++        // Error or no more requests, break the loop
++        break;
++    }
++
++    // Process the request
++    fuse_session_process_buf(se, &fbuf);
++
++    // Logic can be added here to decide whether to continue or break the loop
++    // For example, based on a flag that can be set by another part of your program.
++
++    // Clean up if necessary
++    free(fbuf.mem);
++  }
++}
+\ No newline at end of file
+diff --git a/plugin-manager.c b/plugin-manager.c
+index 4832136..269f71b 100644
+--- a/plugin-manager.c
++++ b/plugin-manager.c
+@@ -28,20 +28,9 @@
+ struct ovl_plugin_context *
+ load_plugins (const char *plugins)
+ {
+-  char *saveptr = NULL, *it;
+-  cleanup_free char *buf = NULL;
+   struct ovl_plugin_context *ctx;
+ 
+   ctx = calloc (1, sizeof (*ctx));
+-  if (ctx == NULL)
+-    error (EXIT_FAILURE, errno, "cannot allocate context");
+-
+-  buf = strdup (plugins);
+-  if (buf == NULL)
+-    error (EXIT_FAILURE, errno, "cannot allocate memory");
+-
+-  for (it = strtok_r (buf, ":", &saveptr); it; it = strtok_r (NULL, ":", &saveptr))
+-    plugin_load_one (ctx, it);
+ 
+   return ctx;
+ }
+@@ -49,79 +38,18 @@ load_plugins (const char *plugins)
+ void
+ plugin_load_one (struct ovl_plugin_context *context, const char *path)
+ {
+-  plugin_name name;
+-  struct ovl_plugin *p;
+-  plugin_version version;
+-  void *handle = dlopen (path, RTLD_NOW | RTLD_LOCAL);
+-  if (! handle)
+-    error (EXIT_FAILURE, 0, "cannot load plugin %s: %s", path, dlerror ());
+-
+-  p = calloc (1, sizeof (*p));
+-  if (p == NULL)
+-    error (EXIT_FAILURE, errno, "cannot load plugin %s", path);
+-  p->next = context->plugins;
+-
+-  version = dlsym (handle, "plugin_version");
+-  if (version == NULL)
+-    error (EXIT_FAILURE, 0, "cannot find symbol `plugin_version` in plugin %s", path);
+-
+-  if (version () != 1)
+-    error (EXIT_FAILURE, 0, "invalid plugin version for %s", path);
+-
+-  p->handle = handle;
+-  name = dlsym (handle, "plugin_name");
+-  if (name == NULL)
+-    error (EXIT_FAILURE, 0, "cannot find symbol `plugin_name` in plugin %s", path);
+-
+-  p->name = name ();
+-
+-  if (plugin_find (context, p->name))
+-    error (EXIT_FAILURE, 0, "plugin %s added twice", p->name);
+-
+-  p->load = dlsym (handle, "plugin_load");
+-  if (p->load == NULL)
+-    error (EXIT_FAILURE, 0, "cannot find symbol `plugin_load` in plugin %s", path);
+-
+-  p->release = dlsym (handle, "plugin_release");
+-  if (p->release == NULL)
+-    error (EXIT_FAILURE, 0, "cannot find symbol `plugin_release` in plugin %s", path);
+-
+-  context->plugins = p;
++ 
+ }
+ 
+ struct ovl_plugin *
+ plugin_find (struct ovl_plugin_context *context, const char *name)
+ {
+-  struct ovl_plugin *it;
+-
+-  for (it = context->plugins; it; it = it->next)
+-    {
+-      if (strcmp (name, it->name) == 0)
+-        return it;
+-    }
+   return NULL;
+ }
+ 
+ int
+ plugin_free_all (struct ovl_plugin_context *context)
+ {
+-  struct ovl_plugin *it, *next;
+-
+-  it = context->plugins;
+-  while (it)
+-    {
+-      next = it->next;
+-
+-      it->release ();
+-
+-      /* Skip dlclose (it->handle) as it causes plugins written in Go to crash.  */
+-
+-      free (it);
+-
+-      it = next;
+-    }
+-
+-  free (context);
+ 
+   return 0;
+ }
