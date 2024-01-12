@@ -24,3 +24,5 @@ go.work
 # this project
 layers
 rootfs
+fuse-overlayfs/fuse-overlayfs
+fuse-overlayfs/fuse-overlayfs-bin

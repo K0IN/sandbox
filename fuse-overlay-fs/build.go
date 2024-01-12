@@ -12,7 +12,7 @@ import (
 )
 
 //go:embed fuse-overlayfs-bin
-var fuseOverlayFS []byte
+var FuseOverlayFSBin []byte
 
 type OverlayFs struct {
 	upperDir   string
@@ -21,6 +21,8 @@ type OverlayFs struct {
 	binaryPath string
 }
 
+
+
 func CreateOverlayFs(tmpFolder string) (*OverlayFs, error) {
 	o := &OverlayFs{}
 	tmpDir, err := ioutil.TempDir("", "fuse-overlayfs")
@@ -28,7 +30,7 @@ func CreateOverlayFs(tmpFolder string) (*OverlayFs, error) {
 		panic(err)
 	}
 	tmpBinPath := path.Join(tmpDir, "fuse-overlayfs-bin")
-	err = ioutil.WriteFile(tmpBinPath, fuseOverlayFS, 0755)
+	err = ioutil.WriteFile(tmpBinPath, FuseOverlayFSBin, 0755)
 	if err != nil {
 		panic(err)
 	}
@@ -56,10 +58,13 @@ func (o *OverlayFs) Mount() error {
 		panic(err)
 	}
 
-	mounts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", "/", o.upperDir, o.workDir)
-	_, err = exec.Command(o.binaryPath, "-o", mounts, o.MergedDir).CombinedOutput()
-
-	return err
+	mounts := fmt.Sprintf("uidmapping=0:10:100:100:10000:2000,gidmapping=0:10:100:100:10000:2000,lowerdir=%s,upperdir=%s,workdir=%s", "/", o.upperDir, o.workDir)
+	result, err := exec.Command(o.binaryPath, "-o", mounts, o.MergedDir).CombinedOutput()
+	if err != nil {
+		return err
+	}
+	println(string(result))
+	return nil
 }
 
 func (o *OverlayFs) Unmount() error {
