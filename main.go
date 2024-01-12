@@ -2,148 +2,134 @@ package main
 
 import (
 	"fmt"
-	registry_client "myapp/registry"
-	container "myapp/simple-container"
+	"io/ioutil"
+	fuse_overlay_fs "myapp/fuse-overlay-fs"
 	"os"
-	"strings"
+	"os/exec"
+	"path"
 	"syscall"
-
-	"github.com/akamensky/argparse"
 )
 
-// Remove the TryConfig struct and replace it with individual parameters in the executeTry function.
-func executeTry(command string, workdir *string, skipDiff *bool) {
-	if command == "" {
-		command = os.Getenv("SHELL")
-		if command == "" {
-			command = "/bin/sh"
-		}
-	}
-
-	sandboxDir, err := os.MkdirTemp("", "sandbox")
+func Mount(merge, upper, lower string) error {
+	tmpDir, err := ioutil.TempDir("", "fuse-overlayfs")
 	if err != nil {
-		panic(fmt.Errorf("cannot create sandbox dir: %w", err))
+		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-
-	overlayFs, err := container.CreateOverlayFs(sandboxDir)
-	defer overlayFs.Unmount()
+	// defer os.RemoveAll(tmpDir)
+	tmpBinPath := path.Join(tmpDir, "fuse-overlayfs-bin")
+	err = ioutil.WriteFile(tmpBinPath, fuse_overlay_fs.FuseOverlayFSBin, 0755)
 	if err != nil {
-		panic(fmt.Errorf("cannot create overlayfs: %w", err))
+		return fmt.Errorf("failed to write fuse-overlayfs-bin: %w", err)
 	}
-
-	err = overlayFs.Mount()
+	// uidmapping=0:0:1:1000:1000:1,gidmapping=0:0:1:1000:1000:1,
+	mounts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lower, upper, merge)
+	userMapping := "uidmapping=0:0:1:1000:1000:1,gidmapping=0:0:1:1000:1000:1"
+	result, err := exec.Command(tmpBinPath, "-o", userMapping+","+mounts, merge).CombinedOutput()
+	println(string(result))
 	if err != nil {
-		panic(fmt.Errorf("cannot mount overlayfs: %w", err))
+		return fmt.Errorf("failed to mount overlayfs: %w", err)
 	}
-
-	if workdir == nil {
-		currentDir, err := os.Getwd()
-		if err == nil {
-			workdir = &currentDir
-		}
-	}
-
-	uid, gid, err := container.GetOriginalUser()
-	if err != nil {
-		panic(fmt.Errorf("cannot get original user: %w", err))
-	}
-
-	exec := container.ExecConfig{
-		Env:            os.Environ(),
-		WorkDir:        *workdir,
-		Rootfs:         overlayFs.GetRootDir(),
-		NameSpaceFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
-		HostUid:        uid,
-		HostGid:        gid,
-	}
-
-	err = container.ExecuteCommand(command, &exec)
-	if err != nil {
-		panic(err)
-	}
-
-	// if !*skipDiff {
-	// 	overlayFs.ShowDiff()
-	// }
+	return nil
 }
 
-func executeContainer(imageWithTag string) {
-	client := registry_client.NewDockerRegistryClient(registry_client.RegistryBaseURL, "", "")
-	imageWithTagSplit := strings.Split(imageWithTag, ":")
-	if len(imageWithTagSplit) != 2 {
-		panic(fmt.Errorf("invalid image with tag: %s", imageWithTag))
-	}
-
-	image := imageWithTagSplit[0]
-	tag := imageWithTagSplit[1]
-
-	destination, err := os.MkdirTemp("", "rootfs")
-	if err != nil {
-		panic(fmt.Errorf("cannot create container rootfs dir: %w", err))
-	}
-
-	fmt.Printf("starting image: %s, tag: %s, destination: %s\n", image, tag, destination)
-
-	config, err := registry_client.ExtractAndAssembleImage(client, image, tag, destination)
-	if err != nil {
-		panic(err)
-	}
-
-	// fmt.Println("Config:", config)
-
-	cmd := strings.Join(config.Config.Cmd, "")
-	err = container.ExecuteCommand(cmd, &container.ExecConfig{
-		Env:            config.Config.Env,
-		WorkDir:        "/",
-		Rootfs:         destination,
-		NameSpaceFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
-	})
-
-	if err != nil {
-		panic(err)
-	}
+func Unmount(merge string) error {
+	return exec.Command("fusermount3", "-u", merge).Run()
 }
 
 func main() {
-	//arguments
-	// --allow-network
-	// --allow-proc
-	// --allow-env
-	// --rootfs
-	// --entrypoint
-	// --env
-	// --volume
-	// --workdir
-	// --user
-	// --group
-	// --hostname
-	// --mount OR --overlay
-	// --mount-proc
-	// --mount-dev
-	fmt.Printf("user id %d\n", os.Getuid())
-	fmt.Printf("group id %d\n", os.Getgid())
-	parser := argparse.NewParser("sandbox", "run a command in a sandbox")
+	println("you are ", os.Getgid(), os.Getuid())
+	if len(os.Args) == 1 {
+		// we fork ourselves with a new namespace
+		// we need to be root to do that
+		cmd := exec.Command(os.Args[0], "you are root")
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNET | syscall.CLONE_NEWUSER,
+			Foreground: true,
+			Noctty:     false,
+			Credential: &syscall.Credential{Uid: 0, Gid: 0},
+			UidMappings: []syscall.SysProcIDMap{
+				{ContainerID: 0, HostID: os.Getgid(), Size: 1},
+			},
+			GidMappings: []syscall.SysProcIDMap{
+				{ContainerID: 0, HostID: os.Getgid(), Size: 1},
+			},
+		}
+		cmd.Env = os.Environ()
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			panic(err)
+		}
 
-	tryCommand := parser.NewCommand("try", "execute a command inside a sandbox and review the changes")
-	workDir := tryCommand.String("c", "workdir", &argparse.Options{Required: false, Help: "workdir"})
-	args := parser.StringPositional(&argparse.Options{Required: true, Help: "command to execute"})
-	skipDiff := tryCommand.Flag("s", "skip-diff", &argparse.Options{Required: false, Default: false, Help: "skip diff"})
+		if err := cmd.Wait(); err != nil {
+			panic(err)
+		}
 
-	containerCommand := parser.NewCommand("container", "start a container in the most cracked way possible (please note that this is just chroot with a custom namespace, no overlayfs)")
-	imageWithTag := containerCommand.String("i", "image", &argparse.Options{Required: true, Help: "image with tag, example: library/python:latest"})
-
-	err := parser.Parse(os.Args)
-	if err != nil {
-		fmt.Print(parser.Usage(err))
-		os.Exit(1)
-	}
-
-	if tryCommand.Happened() {
-		executeTry(*args, workDir, skipDiff)
-	} else if containerCommand.Happened() {
-		executeContainer(*imageWithTag)
 	} else {
-		fmt.Print(parser.Usage(err))
-		os.Exit(1)
+		sandboxDir, err := os.MkdirTemp("", "sandbox")
+		if err != nil {
+			panic(err)
+		}
+
+		defer println("cleanup", sandboxDir)
+		defer os.RemoveAll(sandboxDir)
+
+		upperDir := path.Join(sandboxDir, "upperdir")
+		mergedDir := path.Join(sandboxDir, "merged")
+
+		os.MkdirAll(upperDir, 0777)
+		os.MkdirAll(mergedDir, 0777)
+		// os.Chown(upperDir, os.Getuid(), os.Getgid())
+		// os.Chown(mergedDir, os.Getuid(), os.Getgid())
+
+		// err := mountDevices(sandboxDir, []string{"tty", "null", "zero", "full", "random", "urandom"})
+
+		if err := Mount(mergedDir, upperDir, "/"); err != nil {
+			panic(err)
+		}
+		defer Unmount(mergedDir)
+
+		if err := syscall.Mount("tmpfs", path.Join(sandboxDir, "merged", "dev"), "tmpfs", 0, ""); err != nil {
+			panic(err)
+		}
+		defer syscall.Unmount(path.Join(sandboxDir, "merged", "dev"), syscall.MNT_FORCE)
+
+		if err := syscall.Mount("proc", path.Join(sandboxDir, "merged", "proc"), "proc", 0, ""); err != nil {
+			panic(fmt.Errorf("cannot mount proc: %w", err))
+		}
+		defer syscall.Unmount(path.Join(sandboxDir, "merged", "proc"), syscall.MNT_FORCE)
+
+		println("your new rootfs path is: ", mergedDir)
+		cmd := exec.Command("/bin/sh", "-c", "whoami ; id ; /bin/bash")
+		cmd.Dir = "/"
+		err = syscall.Chroot(mergedDir)
+
+		if err != nil {
+			panic(fmt.Errorf("cannot chroot: %w", err))
+		}
+
+		err = syscall.Sethostname([]byte("sandbox"))
+		if err != nil {
+			fmt.Printf("cannot set hostname: %v\n", err)
+		}
+		// cmd.SysProcAttr = &syscall.SysProcAttr{
+		// 	Chroot: mergedDir,
+		// }
+		cmd.Env = os.Environ()
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Start(); err != nil {
+			panic(fmt.Errorf("cannot start command: %w", err))
+		}
+
+		if err := cmd.Wait(); err != nil {
+			panic(fmt.Errorf("cannot wait command: %w", err))
+		}
+
+		println("done")
+		os.Exit(0)
 	}
 }
