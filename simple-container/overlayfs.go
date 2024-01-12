@@ -40,7 +40,11 @@ func (o *OverlayFs) Mount() error {
 	}
 
 	mountArgs := fmt.Sprintf("lowerdir=/,upperdir=%s,workdir=%s", o.upperDir, o.workDir)
-	return syscall.Mount("overlay", o.MergedDir, "overlay", 0, mountArgs)
+	err = syscall.Mount("overlay", o.MergedDir, "overlay", 0, mountArgs)
+	if err != nil {
+		return fmt.Errorf("cannot mount overlayfs: %w", err)
+	}
+	return nil
 }
 
 func (o *OverlayFs) Unmount() error {

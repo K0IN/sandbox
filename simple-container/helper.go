@@ -46,3 +46,12 @@ func GetOriginalUser() (uid int, gid int, err error) {
 
 	return uid, gid, nil
 }
+
+func GetPrimaryShell() string {
+	shell := "/bin/sh"
+	shellEnv := os.Getenv("SHELL")
+	if shellEnv == "" {
+		shell = "/bin/sh"
+	}
+	return shell
+}
