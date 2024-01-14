@@ -4,9 +4,9 @@ package fuse_overlay_fs
 
 import (
 	_ "embed"
-	"io/ioutil"
+	"fmt"
+	"os"
 	"os/exec"
-	"path"
 )
 
 //go:embed fuse-overlayfs-bin
@@ -14,35 +14,39 @@ var fuseOverlayFSBin []byte
 var execPath *string
 
 func GetExecPath() (string, error) {
-	// maybe it is already known
-	// find the "fuse-overlayfs" binary
-
 	if execPath == nil {
-		installedCommandPath, err := exec.LookPath("fuse-overlayfs")
-		if err == nil {
+		if installedCommandPath, err := findInstalledOverlayFsBin(); err == nil {
 			execPath = &installedCommandPath
 			return installedCommandPath, nil
 		}
 
-		tmpPath, err := unpackFuseOverlayFSBin()
-		if err == nil {
+		if tmpPath, err := unpackFuseOverlayFSBin(); err == nil {
 			execPath = &tmpPath
 			return tmpPath, nil
 		}
 
-		return "", err
+		return "", fmt.Errorf("could not find or unpack fuse-overlayfs binary")
 	}
 	return *execPath, nil
 }
 
+func findInstalledOverlayFsBin() (string, error) {
+	return exec.LookPath("fuse-overlayfs")
+}
+
 func unpackFuseOverlayFSBin() (string, error) {
-	tmpDir, err := ioutil.TempDir("", "fuse-overlayfs")
+	tmpFile, err := os.CreateTemp("", "fuse-overlayfs-bin")
 	if err != nil {
 		return "", err
 	}
-	tmpBinPath := path.Join(tmpDir, "fuse-overlayfs-bin")
-	err = ioutil.WriteFile(tmpBinPath, fuseOverlayFSBin, 0755)
-	if err != nil {
+	if _, err := tmpFile.Write(fuseOverlayFSBin); err != nil {
+		return "", err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return "", err
+	}
+	tmpBinPath := tmpFile.Name()
+	if err := os.Chmod(tmpBinPath, 0755); err != nil {
 		return "", err
 	}
 	return tmpBinPath, nil

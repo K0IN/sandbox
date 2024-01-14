@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	fuse_overlay_fs "myapp/fuse-overlay-fs"
+	container "myapp/simple-container"
 	"os"
 	"os/exec"
 	"path"
@@ -53,6 +54,7 @@ func mountDevices(rootFsPath string) error {
 		"random",
 		"urandom",
 	}
+
 	devPath := path.Join(rootFsPath, "dev")
 	if err := os.MkdirAll(devPath, 0755); err != nil {
 		return err
@@ -60,6 +62,8 @@ func mountDevices(rootFsPath string) error {
 
 	for _, deviceName := range devicesToMount {
 		dst := path.Join(devPath, deviceName)
+
+		_ = os.RemoveAll(dst)
 		if _, err := os.Create(dst); err != nil {
 			//return err
 			continue
@@ -142,7 +146,10 @@ func listAllMounts() []string {
 }
 
 func createRootFs() string {
-	sandboxDir := "/tmp/sandbox"
+	sandboxDir, err := os.MkdirTemp("", "sandbox")
+	if err != nil {
+		panic(err)
+	}
 
 	// remove the sandbox dir if it exists
 	if err := os.RemoveAll(sandboxDir); err != nil {
@@ -164,28 +171,32 @@ func createRootFs() string {
 		panic(err)
 	}
 
-	allMountPoints := listAllMounts()
-	for _, mountPoint := range allMountPoints {
-		if mountPoint == "/" || mountPoint == "/dev" || mountPoint == "/proc" || mountPoint == "" {
-			continue // Skip these special mount points
-		}
-		// check if the mountpoint is a directory
-		fileInfo, err := os.Stat(mountPoint)
-		if err != nil || !fileInfo.IsDir() {
-			continue
-		}
+	//allMountPoints := listAllMounts()
+	// for _, mountPoint := range allMountPoints {
+	// 	if mountPoint == "/" || mountPoint == "/dev" || mountPoint == "/proc" || mountPoint == "" {
+	// 		continue // Skip these special mount points
+	// 	}
+	// 	// check if the mountpoint is a directory
+	// 	fileInfo, err := os.Stat(mountPoint)
+	// 	if err != nil || !fileInfo.IsDir() {
+	// 		continue
+	// 	}
+	//
+	// 	//println("Creating overlayfs for mountpoint:", mountPoint)
+	// 	rootFsPath := path.Join(rootFsBasePath, mountPoint)
+	//
+	// 	upperDir := path.Join(upperDirBasePath, mountPoint)
+	// 	workDir := path.Join(workDirBasePath, mountPoint)
+	//
+	// 	// now we can create the overlayfs
+	// 	if err := makeOverlay(mountPoint, upperDir, rootFsPath, workDir); err != nil {
+	// 		fmt.Printf("Error creating overlayfs for mountpoint %s: %v\n", mountPoint, err)
+	// 		continue
+	// 	}
+	// }
 
-		//println("Creating overlayfs for mountpoint:", mountPoint)
-		rootFsPath := path.Join(rootFsBasePath, mountPoint)
-
-		upperDir := path.Join(upperDirBasePath, mountPoint)
-		workDir := path.Join(workDirBasePath, mountPoint)
-
-		// now we can create the overlayfs
-		if err := makeOverlay(mountPoint, upperDir, rootFsPath, workDir); err != nil {
-			fmt.Printf("Error creating overlayfs for mountpoint %s: %v\n", mountPoint, err)
-			continue
-		}
+	if err := makeOverlay("/", upperDirBasePath, rootFsBasePath, workDirBasePath); err != nil {
+		panic(err)
 	}
 
 	return rootFsBasePath
@@ -236,7 +247,7 @@ func createSandboxInsideNamespace(entryCommand string) {
 }
 
 func main() {
-	println("Starting sandbox as user", os.Getuid(), "and group", os.Getgid())
+	// println("Starting sandbox as user", os.Getuid(), "and group", os.Getgid())
 	// we fork ourselves into a new namespace
 	if len(os.Args) == 1 {
 		forkSelfIntoNewNamespace()
@@ -245,6 +256,8 @@ func main() {
 			panic("we need to be root to mount the overlayfs")
 		}
 		// we are inside the new namespace
-		createSandboxInsideNamespace("/bin/fish")
+		shell := container.GetPrimaryShell()
+		println("Starting sandbox with shell", shell)
+		createSandboxInsideNamespace(shell)
 	}
 }
