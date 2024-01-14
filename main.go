@@ -1,139 +1,271 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
+	"sort"
+	"strings"
 	"syscall"
 )
 
-// a go sandbox that can run code on **your** machine without changing actual files
-// we use namespaces to isolate a new bash process
-// to protect your disk we mount a overlayfs on top of your rootfs
-// then we chroot into the new rootfs
-// after you exit the bash process we unmount the overlayfs show the diff and delete the overlayfs
-// the sandbox is saved to /tmp/sandbox and is deleted after you exit the bash process
-// inside the sandbox you are root and can do whatever you want
-// the sandbox is not persistent and is deleted after you exit the bash process
-
-func forkSelfIntoNewNamespace() {
-	cmd := exec.Command(os.Args[0], "fork")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER,
-		// we need to set the uid and gid to 0 to be root inside the new namespace
-		// we also need to set the uid and gid to 0 to be able to mount the overlayfs
-		UidMappings: []syscall.SysProcIDMap{
-
-			// map all users from host
-			{
-				ContainerID: 0,
-				HostID:      1000,
-				Size:        1,
-			},
-		},
-		GidMappings: []syscall.SysProcIDMap{
-
-			// map all groups from host
-			{
-				ContainerID: 0,
-				HostID:      1000,
-				Size:        1,
-			},
-		},
-		// we need to set the gid to 0 to be able to mount the overlayfs
-		// GidMappingsEnableSetgroups: false,
-		Credential: &syscall.Credential{
-			Uid: 0,
-			Gid: 0,
-		},
-		AmbientCaps: []uintptr{
-			// we need CAP_SYS_ADMIN to mount the overlayfs as number
-			37,
-			// we  need CAP_SYS_CHROOT to chroot as number
-			19,
-		},
-	}
-
-	err := cmd.Run()
-	if err != nil {
-		panic(err)
-	}
-
-}
-
-func createSandboxInsideNamespace() {
-	sandboxDir := "/tmp/sandbox4"
-
-	// we are inside the new namespace
-	// we create a new directory for the sandbox
-	// if the /tmp/sandbox directory already exists we delete it
-	if _, err := os.Stat(sandboxDir); err == nil {
-		err = os.RemoveAll(sandboxDir)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	upperDir := path.Join(sandboxDir, "upper")
-	mountDir := path.Join(sandboxDir, "rootfs")
-
-	// we create the directories for the overlayfs
-	if err := os.MkdirAll(upperDir, 0755); err != nil {
-		panic(err)
-	}
+func makeOverlay(lowerDir, upperDir, mountDir, workDir string) error {
+	opts := fmt.Sprintf(
+		"lowerdir=%s,upperdir=%s,workdir=%s,userxattr",
+		lowerDir,
+		upperDir,
+		workDir,
+	)
 
 	if err := os.MkdirAll(mountDir, 0755); err != nil {
-		panic(err)
+		return err
 	}
 
-	// we mount the overlayfs
-	mntCmd := exec.Command("fuse-overlayfs", "overlay", mountDir, "-o", "lowerdir=/,upperdir="+upperDir+",workdir="+upperDir+",squash_to_root")
-	result, err := mntCmd.CombinedOutput()
-	println(string(result))
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		return err
+	}
 
+	if err := os.MkdirAll(upperDir, 0755); err != nil {
+		return err
+	}
+
+	// cmd := exec.Command("fuse-overlayfs", "-t", "overlay", "overlay", "-o", "userxattr", "-o", "squash_to_root", "-o", opts, mountDir) //
+	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", opts, mountDir) //
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("error making overlay for opts %s %s: %v, output: %s", opts, mountDir, cmd.ProcessState.ExitCode(), output)
+	}
+	return nil
+}
+
+func mountDevices(rootFsPath string) error {
+	devicesToMount := []string{
+		"tty",
+		"null",
+		"zero",
+		"full",
+		"random",
+		"urandom",
+	}
+	devPath := path.Join(rootFsPath, "dev")
+	if err := os.MkdirAll(devPath, 0755); err != nil {
+		return err
 	}
 
-	defer func() {
-		cmd := exec.Command("fusermount", "-u", mountDir)
-		result, _ := cmd.CombinedOutput()
-		println(string(result))
+	for _, deviceName := range devicesToMount {
+		dst := path.Join(devPath, deviceName)
+		if _, err := os.Create(dst); err != nil {
+			//return err
+			continue
+		}
 
-	}()
+		cmd := exec.Command("mount", "-o", "bind", "/dev/"+deviceName, dst)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		if err := cmd.Run(); err != nil {
+			// return err
+			continue
+		}
+	}
+	return nil
+}
 
-	// we chroot into the new rootfs
-	err = syscall.Chroot(mountDir)
-	if err != nil {
-		panic(err)
+func mountProc(rootFsPath string) error {
+	procPath := path.Join(rootFsPath, "proc")
+	if err := os.MkdirAll(procPath, 0755); err != nil {
+		return err
 	}
 
-	// we change the working directory to /
-	err = os.Chdir("/")
-	if err != nil {
-		panic(err)
+	cmd := exec.Command("mount", "-t", "proc", "proc", procPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return err
 	}
+	return nil
+}
 
-	// we set the hostname to sandbox
-	err = syscall.Sethostname([]byte("sandbox"))
-	if err != nil {
-		panic(err)
-	}
+func forkSelfIntoNewNamespace() {
+	cmd := exec.Command("unshare", "--mount", "--user", "--map-root-user", "--pid", "--fork", "--uts", os.Args[0], "test")
+	// cmd := exec.Command(os.Args[0], "test")
+	// cmd.SysProcAttr = &syscall.SysProcAttr{
+	// 	Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER | syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS,
+	// 	UidMappings: []syscall.SysProcIDMap{
+	// 		{
+	// 			ContainerID: 0,
+	// 			HostID:      os.Getuid(),
+	// 			Size:        1,
+	// 		},
+	// 		{
+	// 			ContainerID: 1,
+	// 			HostID:      1,
+	// 			Size:        65534,
+	// 		},
+	// 	},
+	// 	GidMappings: []syscall.SysProcIDMap{
+	// 		{
+	// 			ContainerID: 0,
+	// 			HostID:      os.Getgid(),
+	// 			Size:        1,
+	// 		},
+	// 		{
+	// 			ContainerID: 1,
+	// 			HostID:      1,
+	// 			Size:        65534,
+	// 		},
+	// 	},
+	// 	Credential: &syscall.Credential{
+	// 		Uid: 0,
+	// 		Gid: 0,
+	// 	},
+	// }
 
-	// now we can run bash
-	cmd := exec.Command("/bin/bash")
+	cmd.Env = os.Environ()
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	if err := cmd.Run(); err != nil {
 		panic(err)
 	}
+	os.Exit(cmd.ProcessState.ExitCode())
+}
 
-	os.Exit(0)
+func listAllMounts() []string {
+	cmd := exec.Command("find", "/", "-maxdepth", "1")
+	allRootMountsRaw, err := cmd.Output()
+	if err != nil {
+		panic(err)
+	}
+
+	cmd = exec.Command("findmnt", "--real", "-r", "-o", "target", "-n")
+	allMountsRaw, err := cmd.Output()
+	if err != nil {
+		panic(err)
+	}
+
+	allMounts := strings.Split(string(allMountsRaw), "\n")
+	allRootMounts := strings.Split(string(allRootMountsRaw), "\n")
+	allMounts = append(allMounts, allRootMounts...)
+
+	uniqueMountPoints := make(map[string]bool)
+	for _, mp := range allMounts {
+		uniqueMountPoints[mp] = true
+	}
+
+	result := make([]string, 0, len(uniqueMountPoints))
+	for mountPoint := range uniqueMountPoints {
+		result = append(result, strings.TrimSpace(mountPoint))
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return len(result[i]) <= len(result[j])
+	})
+
+	return result
+}
+
+func createRootFs() string {
+	sandboxDir := "/tmp/sandbox"
+
+	// remove the sandbox dir if it exists
+	if err := os.RemoveAll(sandboxDir); err != nil {
+		//panic(err)
+	}
+
+	// lets first create all the directories we need
+	rootFsBasePath := path.Join(sandboxDir, "rootfs")
+	upperDirBasePath := path.Join(sandboxDir, "upperdir")
+	workDirBasePath := path.Join(sandboxDir, "workdir")
+
+	if err := os.MkdirAll(rootFsBasePath, 0755); err != nil {
+		panic(err)
+	}
+	if err := os.MkdirAll(upperDirBasePath, 0755); err != nil {
+		panic(err)
+	}
+	if err := os.MkdirAll(workDirBasePath, 0755); err != nil {
+		panic(err)
+	}
+
+	allMountPoints := listAllMounts()
+	for _, mountPoint := range allMountPoints {
+		if mountPoint == "/" || mountPoint == "/dev" || mountPoint == "/proc" || mountPoint == "" {
+			continue // Skip these special mount points
+		}
+		// check if the mountpoint is a directory
+		fileInfo, err := os.Stat(mountPoint)
+		if err != nil || !fileInfo.IsDir() {
+			continue
+		}
+
+		//println("Creating overlayfs for mountpoint:", mountPoint)
+		rootFsPath := path.Join(rootFsBasePath, mountPoint)
+
+		upperDir := path.Join(upperDirBasePath, mountPoint)
+		workDir := path.Join(workDirBasePath, mountPoint)
+
+		// now we can create the overlayfs
+		if err := makeOverlay(mountPoint, upperDir, rootFsPath, workDir); err != nil {
+			fmt.Printf("Error creating overlayfs for mountpoint %s: %v\n", mountPoint, err)
+			continue
+		}
+	}
+
+	return rootFsBasePath
+}
+
+func createSandboxInsideNamespace() {
+	rootFs := createRootFs()
+	// defer os.RemoveAll(rootFs)
+
+	println("Created rootfs at", rootFs)
+
+	if err := mountDevices(rootFs); err != nil {
+		panic(err)
+	}
+
+	if err := mountProc(rootFs); err != nil {
+		panic(err)
+	}
+
+	if err := syscall.Sethostname([]byte("sandbox")); err != nil {
+		panic(err)
+	}
+
+	// if err := syscall.Chroot(rootFs); err != nil {
+	// 	panic(err)
+	// }
+	//
+	// // list root dir
+	// allFiles, err := os.ReadDir("/")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for _, file := range allFiles {
+	// 	info, _ := file.Info()
+	// 	println("Found file:", file.Name(), "is dir:", file.IsDir(), info.Mode().Perm())
+	// }
+
+	// check if /bin/sh exists
+	//if _, err := os.Stat(path.Join(rootFs, "/bin/sh")); err != nil {
+	//	panic(fmt.Errorf("error checking if /bin/sh exists: %v", err))
+	//}
+
+	cmd := exec.Command("/bin/sh")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		//	Chroot: rootFs,
+	}
+	cmd.Env = os.Environ()
+	cmd.Dir = "/" // path.Join(rootFs, "/bin")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		panic(err)
+	}
 }
 
 func main() {
@@ -142,6 +274,9 @@ func main() {
 	if len(os.Args) == 1 {
 		forkSelfIntoNewNamespace()
 	} else {
+		if os.Getuid() != 0 || os.Getgid() != 0 {
+			panic("we need to be root to mount the overlayfs")
+		}
 		// we are inside the new namespace
 		createSandboxInsideNamespace()
 	}

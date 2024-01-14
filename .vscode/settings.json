@@ -2,7 +2,10 @@
   "cSpell.words": [
     "Cloneflags",
     "DOAS",
+    "fusermount",
     "goarch",
+    "lowerdir",
+    "mountpoint",
     "NEWIPC",
     "NEWNET",
     "NEWNS",
@@ -10,7 +13,9 @@
     "NEWUSER",
     "NEWUTS",
     "Rootfs",
+    "Sethostname",
     "Unshareflags",
+    "upperdir",
     "wangyoucao",
     "Workdir"
   ]
