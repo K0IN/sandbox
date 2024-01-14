@@ -14,10 +14,13 @@ jobs:
       matrix:
         # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
         goos: [linux]
-        goarch: [amd64, arm64]
+        goarch: [amd64]
 
     steps:
     - uses: actions/checkout@v3
+    - run: |
+        apt-get update
+        apt-get install -y curl git meson cmake fuse3 libfuse3-dev autoconf make gcc
     - uses: wangyoucao577/go-release-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -29,5 +32,3 @@ jobs:
         sha256sum: TRUE
         md5sum: TRUE
         ldflags: "-s -w"
-        # extra_files: LICENSE readme.md
-        # compress_assets: FALSE # default is TRUE

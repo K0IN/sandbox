@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	fuse_overlay_fs "myapp/fuse-overlay-fs"
 	"os"
 	"os/exec"
 	"path"
@@ -30,8 +31,12 @@ func makeOverlay(lowerDir, upperDir, mountDir, workDir string) error {
 		return err
 	}
 
-	// cmd := exec.Command("fuse-overlayfs", "-t", "overlay", "overlay", "-o", "userxattr", "-o", "squash_to_root", "-o", opts, mountDir) //
-	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", opts, mountDir) //
+	fuseFsBin, err := fuse_overlay_fs.GetExecPath()
+	if err != nil {
+		return err
+	}
+	// i would really like to use the linux built in overlayfs, but i can't get it to work
+	cmd := exec.Command(fuseFsBin, "-t", "overlay", "overlay", "-o", "userxattr", "-o", "squash_to_root", "-o", opts, mountDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error making overlay for opts %s %s: %v, output: %s", opts, mountDir, cmd.ProcessState.ExitCode(), output)
@@ -90,39 +95,6 @@ func mountProc(rootFsPath string) error {
 
 func forkSelfIntoNewNamespace() {
 	cmd := exec.Command("unshare", "--mount", "--user", "--map-root-user", "--pid", "--fork", "--uts", os.Args[0], "test")
-	// cmd := exec.Command(os.Args[0], "test")
-	// cmd.SysProcAttr = &syscall.SysProcAttr{
-	// 	Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER | syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS,
-	// 	UidMappings: []syscall.SysProcIDMap{
-	// 		{
-	// 			ContainerID: 0,
-	// 			HostID:      os.Getuid(),
-	// 			Size:        1,
-	// 		},
-	// 		{
-	// 			ContainerID: 1,
-	// 			HostID:      1,
-	// 			Size:        65534,
-	// 		},
-	// 	},
-	// 	GidMappings: []syscall.SysProcIDMap{
-	// 		{
-	// 			ContainerID: 0,
-	// 			HostID:      os.Getgid(),
-	// 			Size:        1,
-	// 		},
-	// 		{
-	// 			ContainerID: 1,
-	// 			HostID:      1,
-	// 			Size:        65534,
-	// 		},
-	// 	},
-	// 	Credential: &syscall.Credential{
-	// 		Uid: 0,
-	// 		Gid: 0,
-	// 	},
-	// }
-
 	cmd.Env = os.Environ()
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -134,20 +106,22 @@ func forkSelfIntoNewNamespace() {
 }
 
 func listAllMounts() []string {
-	cmd := exec.Command("find", "/", "-maxdepth", "1")
-	allRootMountsRaw, err := cmd.Output()
+	allRootFiles, err := os.ReadDir("/")
 	if err != nil {
 		panic(err)
 	}
 
-	cmd = exec.Command("findmnt", "--real", "-r", "-o", "target", "-n")
+	cmd := exec.Command("findmnt", "--real", "-r", "-o", "target", "-n")
 	allMountsRaw, err := cmd.Output()
 	if err != nil {
 		panic(err)
 	}
 
 	allMounts := strings.Split(string(allMountsRaw), "\n")
-	allRootMounts := strings.Split(string(allRootMountsRaw), "\n")
+	allRootMounts := make([]string, 0, len(allRootFiles))
+	for _, rootFile := range allRootFiles {
+		allRootMounts = append(allRootMounts, "/"+rootFile.Name())
+	}
 	allMounts = append(allMounts, allRootMounts...)
 
 	uniqueMountPoints := make(map[string]bool)
@@ -217,7 +191,7 @@ func createRootFs() string {
 	return rootFsBasePath
 }
 
-func createSandboxInsideNamespace() {
+func createSandboxInsideNamespace(entryCommand string) {
 	rootFs := createRootFs()
 	// defer os.RemoveAll(rootFs)
 
@@ -231,35 +205,28 @@ func createSandboxInsideNamespace() {
 		panic(err)
 	}
 
-	if err := syscall.Sethostname([]byte("sandbox")); err != nil {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	newHostname := fmt.Sprintf("sandbox@%s", hostname)
+
+	if err := syscall.Sethostname([]byte(newHostname)); err != nil {
 		panic(err)
 	}
 
-	// if err := syscall.Chroot(rootFs); err != nil {
-	// 	panic(err)
-	// }
-	//
-	// // list root dir
-	// allFiles, err := os.ReadDir("/")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// for _, file := range allFiles {
-	// 	info, _ := file.Info()
-	// 	println("Found file:", file.Name(), "is dir:", file.IsDir(), info.Mode().Perm())
-	// }
+	// current dir
+	currentWorkingDir, err := os.Getwd()
+	if err != nil {
+		currentWorkingDir = "/"
+	}
 
-	// check if /bin/sh exists
-	//if _, err := os.Stat(path.Join(rootFs, "/bin/sh")); err != nil {
-	//	panic(fmt.Errorf("error checking if /bin/sh exists: %v", err))
-	//}
-
-	cmd := exec.Command("/bin/sh")
+	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("cd \"%s\" && %s", currentWorkingDir, entryCommand))
+	cmd.Dir = "/"
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		//	Chroot: rootFs,
+		Chroot: rootFs,
 	}
 	cmd.Env = os.Environ()
-	cmd.Dir = "/" // path.Join(rootFs, "/bin")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -278,6 +245,6 @@ func main() {
 			panic("we need to be root to mount the overlayfs")
 		}
 		// we are inside the new namespace
-		createSandboxInsideNamespace()
+		createSandboxInsideNamespace("/bin/fish")
 	}
 }

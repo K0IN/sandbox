@@ -16,6 +16,7 @@
     "Sethostname",
     "Unshareflags",
     "upperdir",
+    "userxattr",
     "wangyoucao",
     "Workdir"
   ]
