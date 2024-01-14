@@ -19,8 +19,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - run: |
-        apt-get update
-        apt-get install -y curl git meson cmake fuse3 libfuse3-dev autoconf make gcc
+        sudo apt-get update
+        sudo apt-get install -y curl git meson cmake fuse3 libfuse3-dev autoconf make gcc
     - uses: wangyoucao577/go-release-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
