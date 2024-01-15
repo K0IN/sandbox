@@ -6,20 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"github.com/akamensky/argparse"
 )
-
-func setSandboxHostname() error {
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown"
-	}
-	newHostname := fmt.Sprintf("sandbox@%s", hostname)
-
-	if err := syscall.Sethostname([]byte(newHostname)); err != nil {
-		return err
-	}
-	return nil
-}
 
 func createSandboxInsideNamespace(entryCommand string) {
 	sandboxDir, rootFs, _, err := sandbox.CreateSandboxDirectories()
@@ -37,7 +26,7 @@ func createSandboxInsideNamespace(entryCommand string) {
 		panic(err)
 	}
 
-	_ = setSandboxHostname()
+	_ = sandbox.SetSandboxHostname()
 
 	// current dir
 	currentWorkingDir := "/"
@@ -60,9 +49,8 @@ func createSandboxInsideNamespace(entryCommand string) {
 }
 
 func main() {
-	if len(os.Args) == 1 {
-		sandbox.ForkSelfIntoNewNamespace(os.Args) // this will call us again with an argument
-	} else {
+	secret := "sandbox-secret"
+	if os.Args[1] == secret {
 		if os.Getuid() != 0 || os.Getgid() != 0 {
 			panic("started in namespace mode but not as root")
 		}
@@ -70,5 +58,29 @@ func main() {
 		shell := sandbox.GetPrimaryShell()
 		println("Starting sandbox with shell", shell)
 		createSandboxInsideNamespace(shell)
+		return
 	}
+
+	parser := argparse.NewParser("sandbox", "run a command in a sandbox")
+	tryCommand := parser.NewCommand("try", "execute a command inside a sandbox and review the changes")
+	// --disable-network
+	// --disable-env
+	// --env key=value
+
+	// skipDiff := tryCommand.Flag("s", "skip-diff", &argparse.Options{Required: false, Default: false, Help: "skip diff"})
+	// workDir := tryCommand.String("c", "workdir", &argparse.Options{Required: false, Help: "workdir"})
+	// args := parser.StringPositional(&argparse.Options{Required: true, Help: "command to execute"})
+	// skipDiff := tryCommand.Flag("s", "skip-diff", &argparse.Options{Required: false, Default: false, Help: "skip diff"})
+
+	// diffCommand := parser.NewCommand("diff", "show a diff of all files")
+	// addCommand := parser.NewCommand("add", "add files from the sandbox to be committed")
+	// --restore staged
+	//
+	// commit := parser.NewCommand("commit", "commit the previously added files to disk")
+	// rm := parser.NewCommand("rm", "forcefully remove all sandbox files")
+
+	if tryCommand.Happened() {
+		sandbox.ForkSelfIntoNewNamespace(os.Args) // this will call us again with an argument
+	}
+
 }

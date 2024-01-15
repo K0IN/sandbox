@@ -5,6 +5,10 @@ import (
 	"os/exec"
 )
 
+type NamespaceMode struct {
+	AllowNetwork bool
+}
+
 func ForkSelfIntoNewNamespace(arguments []string) {
 	// todo use cmd.SysProcAttr if unshare is not available
 	cmd := exec.Command("unshare", "--mount", "--user", "--map-root-user", "--pid", "--fork", "--uts", os.Args[0], "mode=namespace") //, arguments[1:]...)
@@ -31,8 +35,6 @@ func AddNetwork(name string, ip string) error {
 	return nil
 }
 
-func AddMount() error {
-	//sudo mount -o ro,noload /dev/sda1 /media/2tb
-	//  syscall.Mount("/dev/sda1", "/media/2tb", "ext4", syscall.MS_RDONLY, "")
+func RemoveNetwork(name string) error {
 	return nil
 }
