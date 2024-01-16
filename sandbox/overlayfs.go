@@ -94,10 +94,16 @@ func MountProc(rootFsPath string) error {
 	return nil
 }
 
-func CreateSandboxDirectories() (string, string, string, error) {
+type SandboxDirectories struct {
+	SandboxDir       string
+	RootFsBasePath   string
+	UpperDirBasePath string
+}
+
+func CreateSandboxDirectories() (*SandboxDirectories, error) {
 	sandboxDir, err := os.MkdirTemp("", "sandbox")
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 
 	// lets first create all the directories we need
@@ -106,18 +112,22 @@ func CreateSandboxDirectories() (string, string, string, error) {
 	workDirBasePath := path.Join(sandboxDir, "workdir")
 
 	if err := os.MkdirAll(rootFsBasePath, 0755); err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 	if err := os.MkdirAll(upperDirBasePath, 0755); err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 	if err := os.MkdirAll(workDirBasePath, 0755); err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 
 	if err := MakeOverlay("/", upperDirBasePath, rootFsBasePath, workDirBasePath); err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 
-	return sandboxDir, rootFsBasePath, upperDirBasePath, nil
+	return &SandboxDirectories{
+		SandboxDir:       sandboxDir,
+		RootFsBasePath:   rootFsBasePath,
+		UpperDirBasePath: upperDirBasePath,
+	}, nil
 }
