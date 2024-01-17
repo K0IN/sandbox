@@ -1,10 +1,8 @@
 package sandbox
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 )
 
 func GetPrimaryShell() string {
@@ -16,17 +14,4 @@ func GetPrimaryShell() string {
 		return path
 	}
 	return "/bin/sh"
-}
-
-func SetSandboxHostname() error {
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown"
-	}
-	newHostname := fmt.Sprintf("sandbox@%s", hostname)
-
-	if err := syscall.Sethostname([]byte(newHostname)); err != nil {
-		return err
-	}
-	return nil
 }
