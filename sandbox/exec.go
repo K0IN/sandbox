@@ -8,10 +8,11 @@ import (
 type SandboxConfig struct {
 	AllowNetwork bool
 	AllowEnv     bool
+	Hostname     string
 	Arguments    []string
 }
 
-func ForkSelfIntoNewNamespace(config SandboxConfig) {
+func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 	// todo use cmd.SysProcAttr if unshare is not available
 
 	unshareArguments := []string{
@@ -28,19 +29,18 @@ func ForkSelfIntoNewNamespace(config SandboxConfig) {
 	}
 
 	// fork arguments
-	forkArguments := append([]string{os.Args[0], "sandbox-secret"}, config.Arguments...)
+	forkArguments := append([]string{os.Args[0], "sandbox-entry", "--hostname", config.Hostname}, config.Arguments...)
 	arguments := append(unshareArguments, forkArguments...)
 
 	cmd := exec.Command("unshare", arguments...)
 	if config.AllowEnv {
 		cmd.Env = os.Environ()
 	}
-
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		// panic(err)
-	}
-	os.Exit(cmd.ProcessState.ExitCode())
+
+	println("Running sandbox")
+	_ = cmd.Run()
+	return cmd.ProcessState.ExitCode()
 }
