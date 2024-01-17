@@ -1,0 +1,19 @@
+on: push
+
+jobs:
+  build-project:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
+        goos: [linux]
+        goarch: [amd64]
+
+    steps:
+    - uses: actions/checkout@v3
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y curl git meson cmake fuse3 libfuse3-dev autoconf make gcc
+    - run: go generate ./...
+    - run: go build -ldflags "-s -w" .
