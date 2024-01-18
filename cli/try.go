@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"myapp/helper"
 	"myapp/sandbox"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 
 type TryCommandArguments struct {
 	SandboxId    *string
+	Command      *string
 	AllowNetwork *bool
 	AllowEnv     *bool
 	Persist      *bool
@@ -23,6 +25,7 @@ func GetTryCommandParser(parser *argparse.Parser) (tryCommand *argparse.Command,
 		AllowNetwork: tryCommand.Flag("n", "network", &argparse.Options{Required: false, Default: false, Help: "Allow network"}),
 		AllowEnv:     tryCommand.Flag("e", "env", &argparse.Options{Required: false, Default: false, Help: "Allow environment variables"}),
 		Persist:      tryCommand.Flag("p", "persist", &argparse.Options{Required: false, Default: true, Help: "Persist the sandbox, else it will be deleted after the sandbox is exited"}),
+		Command:      tryCommand.StringPositional(&argparse.Options{Required: false, Default: helper.GetPrimaryShell(), Help: "The command to execute inside the sandbox, default is the primary shell"}),
 	}
 }
 
@@ -30,7 +33,7 @@ func ExecuteTryCommand(args TryCommandArguments) int {
 	sandboxConfig := sandbox.SandboxConfig{
 		AllowNetwork: *args.AllowNetwork,
 		AllowEnv:     *args.AllowEnv,
-		Arguments:    []string{},
+		Command:      *args.Command,
 	}
 
 	if *args.SandboxId != "" {

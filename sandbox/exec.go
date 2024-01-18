@@ -11,7 +11,7 @@ type SandboxConfig struct {
 	AllowNetwork bool
 	AllowEnv     bool
 	SandboxId    string
-	Arguments    []string
+	Command      string
 	HostDir      string
 }
 
@@ -34,12 +34,13 @@ func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 	}
 
 	// fork arguments
-	forkArguments := append([]string{
+	forkArguments := []string{
 		os.Args[0],
 		"sandbox-entry",
 		"--hostname", config.SandboxId,
 		"--sandboxdir", config.HostDir,
-	}, config.Arguments...)
+		"--command", config.Command,
+	}
 	arguments := append(unshareArguments, forkArguments...)
 
 	cmd := exec.Command("unshare", arguments...)
