@@ -20,12 +20,6 @@ Start a sandbox of your current system:
 
 > sandbox try "<your command>"
 
-<!--
-Start a container (pull from docker hub):
-
-> sandbox container -i library/python:latest
--->
-
 ## Credits
 
 This is highly inspired by [try](https://github.com/binpash/try/blob/main/try) - give it a try!

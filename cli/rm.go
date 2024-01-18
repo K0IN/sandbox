@@ -11,14 +11,14 @@ type RemoveCommandArguments struct {
 	sandboxId *string
 }
 
-func GetRemoveCommandParser(parser *argparse.Parser) (statusCommand *argparse.Command, statusCommandArgs StatusCommandArguments) {
-	statusCommand = parser.NewCommand("rm", "remove a sandbox form disk,")
-	return statusCommand, StatusCommandArguments{
-		sandboxId: statusCommand.StringPositional(&argparse.Options{Required: true, Help: "the sandbox to remove use * for all"}),
+func GetRemoveCommandParser(parser *argparse.Parser) (removeCommand *argparse.Command, statusCommandArgs RemoveCommandArguments) {
+	removeCommand = parser.NewCommand("rm", "remove a sandbox form disk,")
+	return removeCommand, RemoveCommandArguments{
+		sandboxId: removeCommand.StringPositional(&argparse.Options{Required: true, Help: "the sandbox to remove use * for all"}),
 	}
 }
 
-func ExecuteRemoveCommand(statusCommandArgs StatusCommandArguments) error {
+func ExecuteRemoveCommand(statusCommandArgs RemoveCommandArguments) error {
 	if *statusCommandArgs.sandboxId == "*" {
 		return removeAllSandboxes()
 	} else {

@@ -79,7 +79,7 @@ func MountDevices(rootFsPath string) error {
 }
 
 func UnmountDevices(rootFsPath string) error {
-
+	// todo
 	return nil
 }
 
@@ -100,7 +100,7 @@ func MountProc(rootFsPath string) error {
 }
 
 func UnmountProc(rootFsPath string) error {
-
+	// todo
 	return nil
 }
 

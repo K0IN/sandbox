@@ -29,6 +29,7 @@ func ExecuteStatusCommand(statusCommandArgs StatusCommandArguments) error {
 		return err
 	}
 
+	// todo: add a status icon for each file, to show if it is staged or not
 	fmt.Printf("Status of sandbox %s\n", *statusCommandArgs.sandboxId)
 	fmt.Printf("Files: %d\n", len(status.Files))
 	for _, file := range status.Files {
