@@ -78,6 +78,11 @@ func MountDevices(rootFsPath string) error {
 	return nil
 }
 
+func UnmountDevices(rootFsPath string) error {
+
+	return nil
+}
+
 func MountProc(rootFsPath string) error {
 	procPath := path.Join(rootFsPath, "proc")
 	if err := os.MkdirAll(procPath, 0755); err != nil {
@@ -94,22 +99,27 @@ func MountProc(rootFsPath string) error {
 	return nil
 }
 
+func UnmountProc(rootFsPath string) error {
+
+	return nil
+}
+
 type SandboxDirectories struct {
 	SandboxDir       string
 	RootFsBasePath   string
 	UpperDirBasePath string
 }
 
-func CreateSandboxDirectories() (*SandboxDirectories, error) {
-	sandboxDir, err := os.MkdirTemp("", "sandbox")
+func CreateSandboxDirectories(sandboxDir string) (*SandboxDirectories, error) {
+	err := os.MkdirAll(sandboxDir, 0755) // ensure sandbox dir exists
 	if err != nil {
 		return nil, err
 	}
 
 	// lets first create all the directories we need
-	rootFsBasePath := path.Join(sandboxDir, "rootfs")
-	upperDirBasePath := path.Join(sandboxDir, "upperdir")
-	workDirBasePath := path.Join(sandboxDir, "workdir")
+	rootFsBasePath := path.Join(sandboxDir, SandboxRootFs)
+	upperDirBasePath := path.Join(sandboxDir, SandboxUpperDir)
+	workDirBasePath := path.Join(sandboxDir, SandboxWorkDir)
 
 	if err := os.MkdirAll(rootFsBasePath, 0755); err != nil {
 		return nil, err
