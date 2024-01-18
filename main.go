@@ -23,7 +23,7 @@ func executeSandbox(hostname, hostPath, command *string) int {
 func main() {
 	parser := argparse.NewParser("sandbox", "run a command in a sandbox")
 	tryParser, tryArguments := cli.GetTryCommandParser(parser)
-	diffParser := cli.GetDiffCommandParser(parser)
+	diffParser, diffArguments := cli.GetDiffCommandParser(parser)
 	statusParser, statusArguments := cli.GetStatusCommandParser(parser)
 	listParser := cli.GetListCommandParser(parser)
 	removeParser, removeArguments := cli.GetRemoveCommandParser(parser)
@@ -39,7 +39,7 @@ func main() {
 		sandboxResult := executeSandbox(sandboxHostName, sandboxHostPath, sandboxEntryCommand)
 		os.Exit(sandboxResult)
 	} else if diffParser.Happened() {
-		if err := cli.ExecuteDiffCommand(); err != nil {
+		if err := cli.ExecuteDiffCommand(diffArguments); err != nil {
 			panic(err)
 		}
 	} else if statusParser.Happened() {
