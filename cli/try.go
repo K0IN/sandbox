@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"myapp/sandbox"
+	"os"
 
 	"github.com/akamensky/argparse"
 )
@@ -37,15 +38,22 @@ func ExecuteTryCommand(args TryCommandArguments) int {
 		if err != nil {
 			panic(fmt.Errorf("failed to load sandbox: %s %w", *args.SandboxId, err))
 		}
-		sandboxConfig.Hostname = sb.SandboxId
+		sandboxConfig.SandboxId = sb.SandboxId
+		sandboxConfig.HostDir = sb.SandboxBaseDir
 	} else if !*args.Persist {
 		sb, err := sandbox.CreateSandbox()
 		if err != nil {
 			panic(fmt.Errorf("failed to create sandbox: %w", err))
 		}
-		sandboxConfig.Hostname = sb.SandboxId
+		sandboxConfig.SandboxId = sb.SandboxId
+		sandboxConfig.HostDir = sb.SandboxBaseDir
 	} else {
-		sandboxConfig.Hostname = "sandbox"
+		sandboxConfig.SandboxId = "sandbox"
+		sandboxDir, err := os.MkdirTemp("", "sandbox")
+		if err != nil {
+			panic(fmt.Errorf("failed to create sandbox tmp folder: %w", err))
+		}
+		sandboxConfig.HostDir = sandboxDir
 	}
 
 	returnCode := sandbox.ForkSelfIntoNewNamespace(sandboxConfig) // this will call us again with an argument
