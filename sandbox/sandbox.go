@@ -2,18 +2,32 @@ package sandbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 
 	nanoid "github.com/matoous/go-nanoid/v2"
 )
 
+const (
+	SandboxConfigFileName = "config.json"
+	SandboxUpperDir       = "upper"
+	SandboxWorkDir        = "workdir"
+	SandboxRootFs         = "rootfs"
+)
+
 type Sandbox struct {
-	SandboxId string
+	SandboxId      string
+	SandboxBaseDir string
 }
 
 type SandboxInfo struct {
 	AddedFiles []string `json:"addedFiles"`
+}
+
+type SandboxStatus struct {
+	Files []string `json:"addedFiles"`
 }
 
 func getSandboxBaseDir() (baseDir string, err error) {
@@ -22,6 +36,14 @@ func getSandboxBaseDir() (baseDir string, err error) {
 		return "", err
 	}
 	return path.Join(homeDir, ".sandboxes"), nil
+}
+
+func getDirForSandbox(sandboxId string) (sandboxDir string, err error) {
+	baseDir, err := getSandboxBaseDir()
+	if err != nil {
+		return "", err
+	}
+	return path.Join(baseDir, sandboxId), nil
 }
 
 func CreateSandbox() (sandbox *Sandbox, err error) {
@@ -33,17 +55,17 @@ func CreateSandbox() (sandbox *Sandbox, err error) {
 	// append sb to the sandbox name
 	sandboxId = "sb-" + sandboxId
 
-	baseDir, err := getSandboxBaseDir()
+	sandboxFolder, err := getDirForSandbox(sandboxId)
 	if err != nil {
 		return nil, err
 	}
-	sandboxFolder := path.Join(baseDir, sandboxId)
+
 	err = os.MkdirAll(sandboxFolder, 0755)
 	if err != nil {
 		return nil, err
 	}
 
-	sandboxConfigFilePath := path.Join(sandboxFolder, "config.json")
+	sandboxConfigFilePath := path.Join(sandboxFolder, SandboxConfigFileName)
 	configFile, err := os.Create(sandboxConfigFilePath)
 	if err != nil {
 		return nil, err
@@ -55,7 +77,8 @@ func CreateSandbox() (sandbox *Sandbox, err error) {
 	})
 
 	return &Sandbox{
-		SandboxId: sandboxId,
+		SandboxId:      sandboxId,
+		SandboxBaseDir: sandboxFolder,
 	}, nil
 }
 
@@ -72,7 +95,8 @@ func ListSandboxes() (sandboxes []*Sandbox, err error) {
 
 	for _, file := range files {
 		sandbox := Sandbox{
-			SandboxId: file.Name(),
+			SandboxId:      file.Name(),
+			SandboxBaseDir: path.Join(baseDir, file.Name()),
 		}
 		sandboxes = append(sandboxes, &sandbox)
 	}
@@ -82,27 +106,42 @@ func ListSandboxes() (sandboxes []*Sandbox, err error) {
 
 func LoadSandboxById(sandboxId string) (sandbox *Sandbox, err error) {
 	// check if the sandbox directory exists
-	baseDir, err := getSandboxBaseDir()
+	sandboxFolder, err := getDirForSandbox(sandboxId)
 	if err != nil {
 		return nil, err
 	}
-
-	sandboxFolder := path.Join(baseDir, sandboxId)
 
 	_, err = os.Stat(sandboxFolder)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sandbox not found with id: %s (%s)", sandboxId, sandboxFolder)
 	}
 
 	return &Sandbox{
-		SandboxId: sandboxId,
+		SandboxId:      sandboxId,
+		SandboxBaseDir: sandboxFolder,
 	}, nil
 }
 
-func (sandbox *Sandbox) GetStatus() (status string, err error) {
-	return "", nil
+func (sandbox *Sandbox) GetStatus() (status *SandboxStatus, err error) {
+	fmt.Printf("sandbox folder: %s\n", sandbox.SandboxBaseDir)
+	// find all files inside the sandbox folder
+	upperDir := path.Join(sandbox.SandboxBaseDir, SandboxUpperDir)
+	// loop through all files in the upper directory
+	var files []string
+	err = filepath.Walk(upperDir, func(path string, info os.FileInfo, err error) error {
+		files = append(files, path)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &SandboxStatus{
+		Files: files,
+	}, nil
 }
 
 func (sandbox *Sandbox) Remove() error {
-	return nil
+	return os.RemoveAll(sandbox.SandboxBaseDir)
 }
