@@ -7,21 +7,23 @@ import (
 	"syscall"
 )
 
-func CreateSandboxInsideNamespace(entryCommand, hostname string) int {
-	sandboxPaths, err := CreateSandboxDirectories()
+/* this is the side INSIDE the namespace */
+
+func CreateSandboxInsideNamespace(entryCommand, hostname, hostPath string) int {
+	sandboxPaths, err := CreateSandboxDirectories(hostPath)
 	if err != nil {
 		panic(err)
 	}
 
-	println("Created sandbox directories", sandboxPaths.SandboxDir)
-
 	if err := MountDevices(sandboxPaths.RootFsBasePath); err != nil {
 		panic(err)
 	}
+	defer UnmountDevices(sandboxPaths.RootFsBasePath)
 
 	if err := MountProc(sandboxPaths.RootFsBasePath); err != nil {
 		panic(err)
 	}
+	defer UnmountProc(sandboxPaths.RootFsBasePath)
 
 	if err := syscall.Sethostname([]byte(hostname)); err != nil {
 		fmt.Println("Failed to set hostname", err)

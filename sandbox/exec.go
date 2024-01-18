@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"fmt"
+	"myapp/helper"
 	"os"
 	"os/exec"
 )
@@ -8,9 +10,12 @@ import (
 type SandboxConfig struct {
 	AllowNetwork bool
 	AllowEnv     bool
-	Hostname     string
+	SandboxId    string
 	Arguments    []string
+	HostDir      string
 }
+
+/* this is the side OUTSIDE the namespace which will start the namespace part later */
 
 func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 	// todo use cmd.SysProcAttr if unshare is not available
@@ -29,7 +34,12 @@ func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 	}
 
 	// fork arguments
-	forkArguments := append([]string{os.Args[0], "sandbox-entry", "--hostname", config.Hostname}, config.Arguments...)
+	forkArguments := append([]string{
+		os.Args[0],
+		"sandbox-entry",
+		"--hostname", config.SandboxId,
+		"--sandboxdir", config.HostDir,
+	}, config.Arguments...)
 	arguments := append(unshareArguments, forkArguments...)
 
 	cmd := exec.Command("unshare", arguments...)
@@ -40,7 +50,13 @@ func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	println("Running sandbox")
 	_ = cmd.Run()
+
+	if piped, err := helper.IsOutputPiped(); !piped && err == nil {
+		fmt.Printf("Sandbox: %s at %s exited with code: %d\n", config.SandboxId, config.HostDir, cmd.ProcessState.ExitCode())
+	} else {
+		println(config.SandboxId)
+	}
+
 	return cmd.ProcessState.ExitCode()
 }
