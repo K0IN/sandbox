@@ -2,11 +2,11 @@ package helper
 
 import "os"
 
-func IsOutputPiped() (bool, error) {
+func IsOutputPiped() bool {
 	outputStat, err := os.Stdout.Stat()
 	if err != nil {
-		return false, err
+		return false
 	}
 	isPiped := outputStat.Mode()&os.ModeCharDevice == 0
-	return isPiped, nil
+	return isPiped
 }

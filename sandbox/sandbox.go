@@ -6,20 +6,29 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	nanoid "github.com/matoous/go-nanoid/v2"
 )
 
 const (
+	SandboxDirName        = ".sandboxes"
 	SandboxConfigFileName = "config.json"
 	SandboxUpperDir       = "upper"
 	SandboxWorkDir        = "workdir"
 	SandboxRootFs         = "rootfs"
 )
 
+type SandboxDirectories struct {
+	SandboxDir       string
+	RootFsBasePath   string
+	UpperDirBasePath string
+	WorkDirBasePath  string
+}
+
 type Sandbox struct {
-	SandboxId      string
-	SandboxBaseDir string
+	SandboxId  string
+	SandboxDir string
 }
 
 type SandboxInfo struct {
@@ -27,12 +36,41 @@ type SandboxInfo struct {
 	ChangedFiles []string `json:"changedFiles"`
 }
 
+func createSandboxDirs(sandboxDir string) (*SandboxDirectories, error) {
+	err := os.MkdirAll(sandboxDir, 0755) // ensure sandbox dir exists
+	if err != nil {
+		return nil, err
+	}
+
+	// lets first create all the directories we need
+	rootFsBasePath := path.Join(sandboxDir, SandboxRootFs)
+	upperDirBasePath := path.Join(sandboxDir, SandboxUpperDir)
+	workDirBasePath := path.Join(sandboxDir, SandboxWorkDir)
+
+	if err := os.MkdirAll(rootFsBasePath, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(upperDirBasePath, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(workDirBasePath, 0755); err != nil {
+		return nil, err
+	}
+
+	return &SandboxDirectories{
+		SandboxDir:       sandboxDir,
+		RootFsBasePath:   rootFsBasePath,
+		UpperDirBasePath: upperDirBasePath,
+		WorkDirBasePath:  workDirBasePath,
+	}, nil
+}
+
 func getSandboxBaseDir() (baseDir string, err error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return path.Join(homeDir, ".sandboxes"), nil
+	return path.Join(homeDir, SandboxDirName), nil
 }
 
 func getDirForSandbox(sandboxId string) (sandboxDir string, err error) {
@@ -73,9 +111,13 @@ func CreateSandbox() (sandbox *Sandbox, err error) {
 		StagedFiles: []string{},
 	})
 
+	if _, err = createSandboxDirs(sandboxFolder); err != nil {
+		return nil, err
+	}
+
 	return &Sandbox{
-		SandboxId:      sandboxId,
-		SandboxBaseDir: sandboxFolder,
+		SandboxId:  sandboxId,
+		SandboxDir: sandboxFolder,
 	}, nil
 }
 
@@ -92,8 +134,8 @@ func ListSandboxes() (sandboxes []*Sandbox, err error) {
 
 	for _, file := range files {
 		sandbox := Sandbox{
-			SandboxId:      file.Name(),
-			SandboxBaseDir: path.Join(baseDir, file.Name()),
+			SandboxId:  file.Name(),
+			SandboxDir: path.Join(baseDir, file.Name()),
 		}
 		sandboxes = append(sandboxes, &sandbox)
 	}
@@ -114,17 +156,26 @@ func LoadSandboxById(sandboxId string) (sandbox *Sandbox, err error) {
 	}
 
 	return &Sandbox{
-		SandboxId:      sandboxId,
-		SandboxBaseDir: sandboxFolder,
+		SandboxId:  sandboxId,
+		SandboxDir: sandboxFolder,
 	}, nil
 }
 
 func (sandbox *Sandbox) GetStatus() (status *SandboxInfo, err error) {
-	upperDir := path.Join(sandbox.SandboxBaseDir, SandboxUpperDir)
+	upperDir := path.Join(sandbox.SandboxDir, SandboxUpperDir)
 	// loop through all files in the upper directory
 	var files []string
-	err = filepath.Walk(upperDir, func(path string, info os.FileInfo, err error) error {
-		files = append(files, path)
+	err = filepath.Walk(upperDir, func(path string, info os.FileInfo, _err error) error {
+		relativePath, err := filepath.Rel(upperDir, path)
+		if err != nil {
+			return err
+		}
+		// we ignore the tmp directory
+		if strings.HasPrefix(relativePath, "tmp/") {
+			return nil
+		}
+
+		files = append(files, relativePath)
 		return nil
 	})
 
@@ -140,7 +191,7 @@ func (sandbox *Sandbox) GetStatus() (status *SandboxInfo, err error) {
 
 func (sandbox *Sandbox) AddStagedFile(file string) error {
 	// add the staged files to the config file
-	sandboxConfigFilePath := path.Join(sandbox.SandboxBaseDir, SandboxConfigFileName)
+	sandboxConfigFilePath := path.Join(sandbox.SandboxDir, SandboxConfigFileName)
 	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
 	if err != nil {
 		return err
@@ -166,7 +217,7 @@ func (sandbox *Sandbox) AddStagedFile(file string) error {
 
 func (sandbox *Sandbox) RemoveStagedFile(file string) error {
 	// add the staged files to the config file
-	sandboxConfigFilePath := path.Join(sandbox.SandboxBaseDir, SandboxConfigFileName)
+	sandboxConfigFilePath := path.Join(sandbox.SandboxDir, SandboxConfigFileName)
 	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
 	if err != nil {
 		return err
@@ -197,7 +248,7 @@ func (sandbox *Sandbox) RemoveStagedFile(file string) error {
 
 func (sandbox *Sandbox) IsStaged(file string) (bool, error) {
 	// add the staged files to the config file
-	sandboxConfigFilePath := path.Join(sandbox.SandboxBaseDir, SandboxConfigFileName)
+	sandboxConfigFilePath := path.Join(sandbox.SandboxDir, SandboxConfigFileName)
 	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
 	if err != nil {
 		return false, err
@@ -224,5 +275,5 @@ func (sandbox *Sandbox) Commit() error {
 }
 
 func (sandbox *Sandbox) Remove() error {
-	return os.RemoveAll(sandbox.SandboxBaseDir)
+	return os.RemoveAll(sandbox.SandboxDir)
 }

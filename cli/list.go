@@ -19,7 +19,7 @@ func ExecuteListCommand() error {
 		return err
 	}
 
-	if isPiped, err := helper.IsOutputPiped(); isPiped && err == nil {
+	if isPiped := helper.IsOutputPiped(); isPiped {
 		for _, sandbox := range allSandboxes {
 			fmt.Println(sandbox.SandboxId)
 		}

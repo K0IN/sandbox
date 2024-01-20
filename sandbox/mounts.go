@@ -17,18 +17,6 @@ func MakeOverlay(lowerDir, upperDir, mountDir, workDir string) error {
 		workDir,
 	)
 
-	if err := os.MkdirAll(mountDir, 0755); err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(workDir, 0755); err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(upperDir, 0755); err != nil {
-		return err
-	}
-
 	fuseFsBin, err := fuse_overlay_fs.GetExecPath()
 	if err != nil {
 		return err
@@ -112,38 +100,4 @@ func MountProc(rootFsPath string) error {
 func UnmountProc(upperFs string) error {
 	_ = syscall.Unmount(path.Join(upperFs, "proc"), 0)
 	return os.Remove(path.Join(upperFs, "proc"))
-}
-
-type SandboxDirectories struct {
-	SandboxDir       string
-	RootFsBasePath   string
-	UpperDirBasePath string
-}
-
-func CreateSandboxDirectories(sandboxDir string) (*SandboxDirectories, error) {
-	err := os.MkdirAll(sandboxDir, 0755) // ensure sandbox dir exists
-	if err != nil {
-		return nil, err
-	}
-
-	// lets first create all the directories we need
-	rootFsBasePath := path.Join(sandboxDir, SandboxRootFs)
-	upperDirBasePath := path.Join(sandboxDir, SandboxUpperDir)
-	workDirBasePath := path.Join(sandboxDir, SandboxWorkDir)
-
-	if err := os.MkdirAll(rootFsBasePath, 0755); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(upperDirBasePath, 0755); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(workDirBasePath, 0755); err != nil {
-		return nil, err
-	}
-
-	return &SandboxDirectories{
-		SandboxDir:       sandboxDir,
-		RootFsBasePath:   rootFsBasePath,
-		UpperDirBasePath: upperDirBasePath,
-	}, nil
 }

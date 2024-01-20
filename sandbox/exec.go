@@ -16,10 +16,8 @@ type SandboxConfig struct {
 }
 
 /* this is the side OUTSIDE the namespace which will start the namespace part later */
-
 func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 	// todo use cmd.SysProcAttr if unshare is not available
-
 	unshareArguments := []string{
 		"--mount",
 		"--user",
@@ -53,7 +51,7 @@ func ForkSelfIntoNewNamespace(config SandboxConfig) int {
 
 	_ = cmd.Run()
 
-	if piped, err := helper.IsOutputPiped(); !piped && err == nil {
+	if piped := helper.IsOutputPiped(); !piped {
 		fmt.Printf("Sandbox: %s at %s exited with code: %d\n", config.SandboxId, config.HostDir, cmd.ProcessState.ExitCode())
 	} else {
 		println(config.SandboxId)

@@ -42,14 +42,14 @@ func ExecuteTryCommand(args TryCommandArguments) int {
 			panic(fmt.Errorf("failed to load sandbox: %s %w", *args.SandboxId, err))
 		}
 		sandboxConfig.SandboxId = sb.SandboxId
-		sandboxConfig.HostDir = sb.SandboxBaseDir
+		sandboxConfig.HostDir = sb.SandboxDir
 	} else if !*args.Persist {
 		sb, err := sandbox.CreateSandbox()
 		if err != nil {
 			panic(fmt.Errorf("failed to create sandbox: %w", err))
 		}
 		sandboxConfig.SandboxId = sb.SandboxId
-		sandboxConfig.HostDir = sb.SandboxBaseDir
+		sandboxConfig.HostDir = sb.SandboxDir
 	} else {
 		sandboxConfig.SandboxId = "sandbox"
 		sandboxDir, err := os.MkdirTemp("", "sandbox")

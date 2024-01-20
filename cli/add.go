@@ -39,7 +39,7 @@ func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
 
 	selectedFiles := []string{}
 	for _, file := range status.ChangedFiles {
-		relativeDir, _ := filepath.Rel(sandbox.SandboxBaseDir, file)
+		relativeDir, _ := filepath.Rel(sandbox.SandboxDir, file)
 		if match, err := path.Match(*statusCommandArgs.fileSelector, relativeDir); err == nil && match {
 			selectedFiles = append(selectedFiles, file)
 		}
