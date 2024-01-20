@@ -9,7 +9,7 @@ import (
 )
 
 func GetListCommandParser(parser *argparse.Parser) (diffCommand *argparse.Command) {
-	diffCommand = parser.NewCommand("list", "List all sandboxes")
+	diffCommand = parser.NewCommand("ls", "List all sandboxes")
 	return diffCommand
 }
 

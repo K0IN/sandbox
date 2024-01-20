@@ -15,10 +15,15 @@ func CreateSandboxInsideNamespace(entryCommand, hostname, hostPath string) int {
 		panic(err)
 	}
 
+	if err := MakeOverlay("/", sandboxPaths.UpperDirBasePath, sandboxPaths.RootFsBasePath, sandboxPaths.UpperDirBasePath); err != nil {
+		panic(err)
+	}
+	defer UnmountOverlay(sandboxPaths.RootFsBasePath)
+
 	if err := MountDevices(sandboxPaths.RootFsBasePath); err != nil {
 		panic(err)
 	}
-	defer UnmountDevices(sandboxPaths.RootFsBasePath)
+	defer UnmountDevices(sandboxPaths.UpperDirBasePath, sandboxPaths.RootFsBasePath)
 
 	if err := MountProc(sandboxPaths.RootFsBasePath); err != nil {
 		panic(err)

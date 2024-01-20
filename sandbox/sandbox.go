@@ -23,11 +23,8 @@ type Sandbox struct {
 }
 
 type SandboxInfo struct {
-	AddedFiles []string `json:"addedFiles"`
-}
-
-type SandboxStatus struct {
-	Files []string `json:"addedFiles"`
+	StagedFiles  []string `json:"stagedFiles"`
+	ChangedFiles []string `json:"changedFiles"`
 }
 
 func getSandboxBaseDir() (baseDir string, err error) {
@@ -73,7 +70,7 @@ func CreateSandbox() (sandbox *Sandbox, err error) {
 	defer configFile.Close()
 	// write a empty config file
 	json.NewEncoder(configFile).Encode(SandboxInfo{
-		AddedFiles: []string{},
+		StagedFiles: []string{},
 	})
 
 	return &Sandbox{
@@ -122,9 +119,7 @@ func LoadSandboxById(sandboxId string) (sandbox *Sandbox, err error) {
 	}, nil
 }
 
-func (sandbox *Sandbox) GetStatus() (status *SandboxStatus, err error) {
-	fmt.Printf("sandbox folder: %s\n", sandbox.SandboxBaseDir)
-	// find all files inside the sandbox folder
+func (sandbox *Sandbox) GetStatus() (status *SandboxInfo, err error) {
 	upperDir := path.Join(sandbox.SandboxBaseDir, SandboxUpperDir)
 	// loop through all files in the upper directory
 	var files []string
@@ -137,9 +132,95 @@ func (sandbox *Sandbox) GetStatus() (status *SandboxStatus, err error) {
 		return nil, err
 	}
 
-	return &SandboxStatus{
-		Files: files,
+	return &SandboxInfo{
+		StagedFiles:  []string{},
+		ChangedFiles: files,
 	}, nil
+}
+
+func (sandbox *Sandbox) AddStagedFile(file string) error {
+	// add the staged files to the config file
+	sandboxConfigFilePath := path.Join(sandbox.SandboxBaseDir, SandboxConfigFileName)
+	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+	defer configFile.Close()
+
+	var sandboxInfo SandboxInfo
+	err = json.NewDecoder(configFile).Decode(&sandboxInfo)
+	if err != nil {
+		return err
+	}
+
+	sandboxInfo.StagedFiles = append(sandboxInfo.StagedFiles, file)
+
+	configFile.Seek(0, 0)
+	err = json.NewEncoder(configFile).Encode(sandboxInfo)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (sandbox *Sandbox) RemoveStagedFile(file string) error {
+	// add the staged files to the config file
+	sandboxConfigFilePath := path.Join(sandbox.SandboxBaseDir, SandboxConfigFileName)
+	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+	defer configFile.Close()
+
+	var sandboxInfo SandboxInfo
+	err = json.NewDecoder(configFile).Decode(&sandboxInfo)
+	if err != nil {
+		return err
+	}
+
+	for i, stagedFile := range sandboxInfo.StagedFiles {
+		if stagedFile == file {
+			sandboxInfo.StagedFiles = append(sandboxInfo.StagedFiles[:i], sandboxInfo.StagedFiles[i+1:]...)
+			break
+		}
+	}
+
+	configFile.Seek(0, 0)
+	err = json.NewEncoder(configFile).Encode(sandboxInfo)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (sandbox *Sandbox) IsStaged(file string) (bool, error) {
+	// add the staged files to the config file
+	sandboxConfigFilePath := path.Join(sandbox.SandboxBaseDir, SandboxConfigFileName)
+	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
+	if err != nil {
+		return false, err
+	}
+	defer configFile.Close()
+
+	var sandboxInfo SandboxInfo
+	err = json.NewDecoder(configFile).Decode(&sandboxInfo)
+	if err != nil {
+		return false, err
+	}
+
+	for _, stagedFile := range sandboxInfo.StagedFiles {
+		if stagedFile == file {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (sandbox *Sandbox) Commit() error {
+	return nil
 }
 
 func (sandbox *Sandbox) Remove() error {

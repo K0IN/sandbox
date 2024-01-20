@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"myapp/sandbox"
+	"path"
 
 	"github.com/akamensky/argparse"
 )
@@ -14,43 +15,30 @@ type RemoveCommandArguments struct {
 func GetRemoveCommandParser(parser *argparse.Parser) (removeCommand *argparse.Command, statusCommandArgs RemoveCommandArguments) {
 	removeCommand = parser.NewCommand("rm", "remove a sandbox form disk,")
 	return removeCommand, RemoveCommandArguments{
-		sandboxId: removeCommand.StringPositional(&argparse.Options{Required: true, Help: "the sandbox to remove use * for all"}),
+		sandboxId: removeCommand.StringPositional(&argparse.Options{Required: true, Help: "the sandbox to remove you can also use glob patterns"}),
 	}
 }
 
 func ExecuteRemoveCommand(statusCommandArgs RemoveCommandArguments) error {
-	if *statusCommandArgs.sandboxId == "*" {
-		return removeAllSandboxes()
-	} else {
-		return removeSandbox(*statusCommandArgs.sandboxId)
-	}
-}
-
-func removeSandbox(sandboxId string) error {
 	all, err := sandbox.ListSandboxes()
 	if err != nil {
 		return err
 	}
+
+	found := false
 	for _, sandbox := range all {
-		if sandbox.SandboxId == sandboxId {
-			fmt.Printf("Removing sandbox %s\n", sandboxId)
-			return sandbox.Remove()
+		if match, err := path.Match(*statusCommandArgs.sandboxId, sandbox.SandboxId); err == nil && match {
+			found = true
+			fmt.Printf("Removing sandbox %s\n", sandbox.SandboxId)
+			err := sandbox.Remove()
+			if err != nil {
+				return fmt.Errorf("Error removing sandbox %s: %s", sandbox.SandboxId, err)
+			}
 		}
 	}
 
-	fmt.Printf("Sandbox %s not found\n", sandboxId)
-	return nil
-}
-
-func removeAllSandboxes() error {
-	all, err := sandbox.ListSandboxes()
-	if err != nil {
-		return err
-	}
-	for _, sandbox := range all {
-		if err := sandbox.Remove(); err != nil {
-			return err
-		}
+	if !found && len(all) > 0 {
+		return fmt.Errorf("Sandbox not found")
 	}
 	return nil
 }

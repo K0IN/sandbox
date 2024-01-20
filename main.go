@@ -27,6 +27,7 @@ func main() {
 	statusParser, statusArguments := cli.GetStatusCommandParser(parser)
 	listParser := cli.GetListCommandParser(parser)
 	removeParser, removeArguments := cli.GetRemoveCommandParser(parser)
+	addParser, addArguments := cli.GetAddCommandParser(parser)
 
 	execute := parser.NewCommand("sandbox-entry", argparse.DisableDescription)
 	sandboxHostName := execute.String("", "hostname", &argparse.Options{Required: true, Help: "hostname"})
@@ -57,5 +58,11 @@ func main() {
 	} else if tryParser.Happened() {
 		executeResult := cli.ExecuteTryCommand(tryArguments)
 		os.Exit(executeResult)
+	} else if addParser.Happened() {
+		if err := cli.ExecuteAddCommand(addArguments); err != nil {
+			panic(err)
+		}
+	} else {
+		fmt.Print(parser.Usage(nil))
 	}
 }

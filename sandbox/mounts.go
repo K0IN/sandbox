@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"syscall"
 )
 
 func MakeOverlay(lowerDir, upperDir, mountDir, workDir string) error {
@@ -37,6 +38,15 @@ func MakeOverlay(lowerDir, upperDir, mountDir, workDir string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error making overlay for opts %s %s: %v, output: %s", opts, mountDir, cmd.ProcessState.ExitCode(), output)
+	}
+	return nil
+}
+
+func UnmountOverlay(mountDir string) error {
+	cmd := exec.Command("fusermount", "-u", mountDir)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error unmounting overlay %s: %v, output: %s", mountDir, cmd.ProcessState.ExitCode(), output)
 	}
 	return nil
 }
@@ -78,9 +88,9 @@ func MountDevices(rootFsPath string) error {
 	return nil
 }
 
-func UnmountDevices(rootFsPath string) error {
-	// todo
-	return nil
+func UnmountDevices(upperFs, rootFsPath string) error {
+	_ = syscall.Unmount(path.Join(rootFsPath, "dev"), 0)
+	return os.RemoveAll(path.Join(upperFs, "dev"))
 }
 
 func MountProc(rootFsPath string) error {
@@ -99,9 +109,9 @@ func MountProc(rootFsPath string) error {
 	return nil
 }
 
-func UnmountProc(rootFsPath string) error {
-	// todo
-	return nil
+func UnmountProc(upperFs string) error {
+	_ = syscall.Unmount(path.Join(upperFs, "proc"), 0)
+	return os.Remove(path.Join(upperFs, "proc"))
 }
 
 type SandboxDirectories struct {
@@ -128,10 +138,6 @@ func CreateSandboxDirectories(sandboxDir string) (*SandboxDirectories, error) {
 		return nil, err
 	}
 	if err := os.MkdirAll(workDirBasePath, 0755); err != nil {
-		return nil, err
-	}
-
-	if err := MakeOverlay("/", upperDirBasePath, rootFsBasePath, workDirBasePath); err != nil {
 		return nil, err
 	}
 
