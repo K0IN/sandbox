@@ -3,6 +3,7 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
+	"myapp/helper"
 	"os"
 	"path"
 	"path/filepath"
@@ -170,6 +171,7 @@ func (sandbox *Sandbox) GetStatus() (status *SandboxInfo, err error) {
 		if err != nil {
 			return err
 		}
+
 		// we ignore the tmp directory
 		if strings.HasPrefix(relativePath, "tmp/") {
 			return nil
@@ -183,8 +185,21 @@ func (sandbox *Sandbox) GetStatus() (status *SandboxInfo, err error) {
 		return nil, err
 	}
 
+	sandboxConfigFilePath := path.Join(sandbox.SandboxDir, SandboxConfigFileName)
+	configFile, err := os.OpenFile(sandboxConfigFilePath, os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+	defer configFile.Close()
+
+	var sandboxInfo SandboxInfo
+	err = json.NewDecoder(configFile).Decode(&sandboxInfo)
+	if err != nil {
+		return nil, err
+	}
+
 	return &SandboxInfo{
-		StagedFiles:  []string{},
+		StagedFiles:  sandboxInfo.StagedFiles,
 		ChangedFiles: files,
 	}, nil
 }
@@ -271,6 +286,34 @@ func (sandbox *Sandbox) IsStaged(file string) (bool, error) {
 }
 
 func (sandbox *Sandbox) Commit() error {
+	// get all staged files
+	sandboxStatus, err := sandbox.GetStatus()
+	if err != nil {
+		return err
+	}
+
+	print(len(sandboxStatus.StagedFiles), " staged files", len(sandboxStatus.ChangedFiles), " changed files\n")
+
+	if len(sandboxStatus.StagedFiles) == 0 {
+		fmt.Println("No staged files to commit")
+		return nil
+	}
+
+	// copy all staged files to the upper directory
+	for _, stagedFile := range sandboxStatus.StagedFiles {
+		// check if the file exists in the upper directory
+		upperFilePath := path.Join(sandbox.SandboxDir, SandboxUpperDir, stagedFile)
+		originalFilePath := path.Join("/", stagedFile)
+		// copy the file to the upper directory
+		os.MkdirAll(path.Dir(originalFilePath), 0755)
+		// commit the file from the upper directory to the rootfs
+
+		fmt.Printf("Committing file %s to %s\n", upperFilePath, originalFilePath)
+		if err := helper.CopyFile(upperFilePath, originalFilePath); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

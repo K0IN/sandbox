@@ -28,6 +28,7 @@ func main() {
 	listParser := cli.GetListCommandParser(parser)
 	removeParser, removeArguments := cli.GetRemoveCommandParser(parser)
 	addParser, addArguments := cli.GetAddCommandParser(parser)
+	commitParser, confirmArguments := cli.GetCommitCommandParser(parser)
 
 	execute := parser.NewCommand("sandbox-entry", argparse.DisableDescription)
 	sandboxHostName := execute.String("", "hostname", &argparse.Options{Required: true, Help: "hostname"})
@@ -60,6 +61,10 @@ func main() {
 		os.Exit(executeResult)
 	} else if addParser.Happened() {
 		if err := cli.ExecuteAddCommand(addArguments); err != nil {
+			panic(err)
+		}
+	} else if commitParser.Happened() {
+		if err := cli.ExecuteCommitCommand(confirmArguments); err != nil {
 			panic(err)
 		}
 	} else {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"myapp/sandbox"
 	"path"
-	"path/filepath"
 
 	"github.com/akamensky/argparse"
 )
@@ -39,8 +38,7 @@ func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
 
 	selectedFiles := []string{}
 	for _, file := range status.ChangedFiles {
-		relativeDir, _ := filepath.Rel(sandbox.SandboxDir, file)
-		if match, err := path.Match(*statusCommandArgs.fileSelector, relativeDir); err == nil && match {
+		if match, err := path.Match(*statusCommandArgs.fileSelector, file); err == nil && match {
 			selectedFiles = append(selectedFiles, file)
 		}
 	}
@@ -50,7 +48,7 @@ func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
 			fmt.Printf("Removing file %s from staging\n", file)
 			err := sandbox.RemoveStagedFile(file)
 			if err != nil {
-				return fmt.Errorf("Error removing file %s from staging: %s", file, err)
+				return fmt.Errorf("error removing file %s from staging: %s", file, err)
 			}
 		}
 	} else {
@@ -58,7 +56,7 @@ func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
 			fmt.Printf("Adding file %s to staging\n", file)
 			err := sandbox.AddStagedFile(file)
 			if err != nil {
-				return fmt.Errorf("Error adding file %s to staging: %s", file, err)
+				return fmt.Errorf("error adding file %s to staging: %s", file, err)
 			}
 		}
 	}
