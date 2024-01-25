@@ -10,8 +10,28 @@ import (
 
 /* this is the side INSIDE the namespace */
 
+func changeHostname(upperDir, hostname string) error {
+	// write to /etc/hostname
+	hostnamePath := path.Join(upperDir, "etc", "hostname")
+	if err := os.MkdirAll(path.Dir(hostnamePath), 0755); err != nil {
+		return err
+	}
+
+	f, err := os.Create(hostnamePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(hostname); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func CreateSandboxInsideNamespace(entryCommand, hostname, sandboxDir string) int {
-	rootFsBasePath := path.Join(sandboxDir, SandboxRootFs)
+	rootFsBasePath := path.Join(sandboxDir, SandboxMountPointDir)
 	upperDirBasePath := path.Join(sandboxDir, SandboxUpperDir)
 	workDirBasePath := path.Join(sandboxDir, SandboxWorkDir)
 
@@ -30,20 +50,39 @@ func CreateSandboxInsideNamespace(entryCommand, hostname, sandboxDir string) int
 	}
 	defer UnmountProc(rootFsBasePath)
 
-	if err := syscall.Sethostname([]byte(hostname)); err != nil {
-		fmt.Println("Failed to set hostname", err)
+	if err := changeHostname(upperDirBasePath, hostname); err != nil {
+		panic(err)
 	}
 
-	// current dir
 	currentWorkingDir := "/"
 	if workDir, err := os.Getwd(); err == nil {
 		currentWorkingDir = workDir
 	}
 
 	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("cd \"%s\" && %s", currentWorkingDir, entryCommand))
-	cmd.Dir = "/"
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Chroot: rootFsBasePath,
+		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER,
+		UidMappings: []syscall.SysProcIDMap{
+			{
+				ContainerID: 0,
+				HostID:      0,
+				Size:        65536,
+			},
+		},
+		GidMappings: []syscall.SysProcIDMap{
+			{
+				ContainerID: 0,
+				HostID:      0,
+				Size:        65536,
+			},
+		},
+		Credential: &syscall.Credential{
+			Uid: uint32(os.Getuid()), // todo: get uid from user
+			Gid: uint32(os.Getgid()), // todo: get gid from user
+		},
+
+		GidMappingsEnableSetgroups: true, // enable su command
+		Chroot:                     rootFsBasePath,
 	}
 	cmd.Env = os.Environ()
 	cmd.Stdin = os.Stdin

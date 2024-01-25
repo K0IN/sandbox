@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"fmt"
-	fuse_overlay_fs "myapp/fuse-overlay-fs"
 	"os"
 	"os/exec"
 	"path"
@@ -16,27 +15,11 @@ func MakeOverlay(lowerDir, upperDir, mountDir, workDir string) error {
 		upperDir,
 		workDir,
 	)
-
-	fuseFsBin, err := fuse_overlay_fs.GetExecPath()
-	if err != nil {
-		return err
-	}
-	// i would really like to use the linux built in overlayfs, but i can't get it to work
-	cmd := exec.Command(fuseFsBin, "-t", "overlay", "overlay", "-o", "userxattr", "-o", "squash_to_root", "-o", opts, mountDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error making overlay for opts %s %s: %v, output: %s", opts, mountDir, cmd.ProcessState.ExitCode(), output)
-	}
-	return nil
+	return syscall.Mount("overlay", mountDir, "overlay", 0, opts)
 }
 
 func UnmountOverlay(mountDir string) error {
-	cmd := exec.Command("fusermount", "-u", mountDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error unmounting overlay %s: %v, output: %s", mountDir, cmd.ProcessState.ExitCode(), output)
-	}
-	return nil
+	return syscall.Unmount(mountDir, 0)
 }
 
 func MountDevices(rootFsPath string) error {
@@ -69,10 +52,27 @@ func MountDevices(rootFsPath string) error {
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin
 		if err := cmd.Run(); err != nil {
-
 			continue
 		}
 	}
+
+	// mount /dev/pts
+	// mount -t devpts pts /mnt/linux/dev/pts
+
+	/// we create the mount point
+	ptsPath := path.Join(rootFsPath, "dev", "pts")
+	if err := os.MkdirAll(ptsPath, 0755); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("mount", "-t", "devpts", "devpts", ptsPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
