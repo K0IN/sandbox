@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"myapp/helper"
-	"myapp/sandbox"
-
 	"github.com/akamensky/argparse"
 )
 
@@ -21,16 +18,5 @@ func GetCommitCommandParser(parser *argparse.Parser) (commitCommand *argparse.Co
 }
 
 func ExecuteCommitCommand(statusCommandArgs CommitCommandArguments) error {
-	sandbox, err := sandbox.LoadSandboxById(*statusCommandArgs.sandboxId)
-	if err != nil {
-		return err
-	}
-
-	if !*statusCommandArgs.yes {
-		manualConfirmation := helper.Confirm("Are you sure you want to commit this sandbox? This will overwrite any existing files with the same name in your host machine.")
-		if !manualConfirmation {
-			return nil
-		}
-	}
-	return sandbox.Commit()
+	return nil // todo
 }

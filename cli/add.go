@@ -1,10 +1,6 @@
 package cli
 
 import (
-	"fmt"
-	"myapp/sandbox"
-	"path"
-
 	"github.com/akamensky/argparse"
 )
 
@@ -24,42 +20,5 @@ func GetAddCommandParser(parser *argparse.Parser) (addCommand *argparse.Command,
 }
 
 func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
-	sandbox, err := sandbox.LoadSandboxById(*statusCommandArgs.sandboxId)
-	if err != nil {
-		return err
-	}
-
-	status, err := sandbox.GetStatus()
-	if err != nil {
-		return err
-	}
-
-	// get paths relative to the sandbox
-
-	selectedFiles := []string{}
-	for _, file := range status.ChangedFiles {
-		if match, err := path.Match(*statusCommandArgs.fileSelector, file); err == nil && match {
-			selectedFiles = append(selectedFiles, file)
-		}
-	}
-
-	if *statusCommandArgs.remove {
-		for _, file := range selectedFiles {
-			fmt.Printf("Removing file %s from staging\n", file)
-			err := sandbox.RemoveStagedFile(file)
-			if err != nil {
-				return fmt.Errorf("error removing file %s from staging: %s", file, err)
-			}
-		}
-	} else {
-		for _, file := range selectedFiles {
-			fmt.Printf("Adding file %s to staging\n", file)
-			err := sandbox.AddStagedFile(file)
-			if err != nil {
-				return fmt.Errorf("error adding file %s to staging: %s", file, err)
-			}
-		}
-	}
-
-	return nil
+	return nil // todo
 }

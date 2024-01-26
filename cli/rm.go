@@ -1,10 +1,6 @@
 package cli
 
 import (
-	"fmt"
-	"myapp/sandbox"
-	"path"
-
 	"github.com/akamensky/argparse"
 )
 
@@ -20,25 +16,5 @@ func GetRemoveCommandParser(parser *argparse.Parser) (removeCommand *argparse.Co
 }
 
 func ExecuteRemoveCommand(statusCommandArgs RemoveCommandArguments) error {
-	all, err := sandbox.ListSandboxes()
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for _, sandbox := range all {
-		if match, err := path.Match(*statusCommandArgs.sandboxId, sandbox.SandboxId); err == nil && match {
-			found = true
-			fmt.Printf("Removing sandbox %s\n", sandbox.SandboxId)
-			err := sandbox.Remove()
-			if err != nil {
-				return fmt.Errorf("Error removing sandbox %s: %s", sandbox.SandboxId, err)
-			}
-		}
-	}
-
-	if !found && len(all) > 0 {
-		return fmt.Errorf("Sandbox not found")
-	}
-	return nil
+	return nil // todo
 }

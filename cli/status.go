@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"fmt"
-	"myapp/sandbox"
-
 	"github.com/akamensky/argparse"
 )
 
@@ -20,26 +17,5 @@ func GetStatusCommandParser(parser *argparse.Parser) (statusCommand *argparse.Co
 }
 
 func ExecuteStatusCommand(statusCommandArgs StatusCommandArguments) error {
-	sandbox, err := sandbox.LoadSandboxById(*statusCommandArgs.sandboxId)
-	if err != nil {
-		return err
-	}
-	status, err := sandbox.GetStatus()
-	if err != nil {
-		return err
-	}
-
-	// todo: add a status icon for each file, to show if it is staged or not
-	fmt.Printf("Status of sandbox %s\n", *statusCommandArgs.sandboxId)
-	fmt.Printf("Files: %d\n", len(status.ChangedFiles))
-	for _, file := range status.ChangedFiles {
-		isStaged, _ := sandbox.IsStaged(file)
-		if isStaged {
-			fmt.Printf("  * %s\n", file)
-		} else {
-			fmt.Printf("    %s\n", file)
-		}
-	}
-
-	return nil
+	return nil // todo
 }

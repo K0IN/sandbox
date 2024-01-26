@@ -1,10 +1,8 @@
 package cli
 
 import (
-	"fmt"
 	"myapp/helper"
 	"myapp/sandbox"
-	"os"
 
 	"github.com/akamensky/argparse"
 )
@@ -29,36 +27,19 @@ func GetTryCommandParser(parser *argparse.Parser) (tryCommand *argparse.Command,
 	}
 }
 
-func ExecuteTryCommand(args TryCommandArguments) int {
-	sandboxConfig := sandbox.SandboxConfig{
-		AllowNetwork: *args.AllowNetwork,
-		AllowEnv:     *args.AllowEnv,
-		Command:      *args.Command,
+func ExecuteTryCommand(args TryCommandArguments) (int, error) {
+	sb, err := sandbox.CreateSandbox()
+	if err != nil {
+		return 0, err
 	}
 
-	if *args.SandboxId != "" {
-		sb, err := sandbox.LoadSandboxById(*args.SandboxId)
-		if err != nil {
-			panic(fmt.Errorf("failed to load sandbox: %s %w", *args.SandboxId, err))
-		}
-		sandboxConfig.SandboxId = sb.SandboxId
-		sandboxConfig.HostDir = sb.SandboxDir
-	} else if !*args.Persist {
-		sb, err := sandbox.CreateSandbox()
-		if err != nil {
-			panic(fmt.Errorf("failed to create sandbox: %w", err))
-		}
-		sandboxConfig.SandboxId = sb.SandboxId
-		sandboxConfig.HostDir = sb.SandboxDir
-	} else {
-		sandboxConfig.SandboxId = "sandbox"
-		sandboxDir, err := os.MkdirTemp("", "sandbox")
-		if err != nil {
-			panic(fmt.Errorf("failed to create sandbox tmp folder: %w", err))
-		}
-		sandboxConfig.HostDir = sandboxDir
-	}
+	resultCode, err := sb.Execute("ls", sandbox.SandboxParams{
+		AllowNetwork:      true,
+		AllowEnv:          true,
+		UserId:            1000,
+		GroupId:           1000,
+		AllowChangeUserId: true,
+	})
 
-	returnCode := sandbox.ForkSelfIntoNewNamespace(sandboxConfig) // this will call us again with an argument
-	return returnCode
+	return resultCode, err
 }
