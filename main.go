@@ -11,7 +11,7 @@ import (
 func main() {
 	if os.Geteuid() != 0 || os.Getegid() != 0 {
 		fmt.Println("You must run this program as root!")
-		fmt.Printf("Current uid: %d, gid: %d\n", os.Geteuid(), os.Getegid())
+		fmt.Printf("Current effective uid: %d, effective gid: %d\n", os.Geteuid(), os.Getegid())
 		fmt.Println("Try running it as suid root or sudo.")
 		fmt.Printf("sudo chown root:root %s && sudo chmod u+s %s\n", os.Args[0], os.Args[0])
 		return
