@@ -3,8 +3,11 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
+	"myapp/helper"
 	"os"
 	"path"
+	"sort"
+	"strings"
 	"syscall"
 )
 
@@ -17,20 +20,17 @@ const (
 )
 
 type OverlayFsInfo struct {
-	StagedFiles  []string `json:"stagedFiles"`
-	ChangedFiles []string `json:"changedFiles"`
+	StagedFiles []string `json:"stagedFiles"`
 }
 
 type OverlayFs struct {
 	BaseDir  string
+	workDir  string
+	upperDir string
+	mountDir string
 	FileInfo OverlayFsInfo
-}
 
-func createDirIfNotExists(dirPath string) error {
-	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		return os.MkdirAll(dirPath, 0755)
-	}
-	return nil
+	mountedPaths []string
 }
 
 func writeJsonToFile(data OverlayFsInfo, filePath string) error {
@@ -65,34 +65,20 @@ func OpenOverlay(sandboxDir string) (*OverlayFs, error) {
 	return &OverlayFs{
 		BaseDir:  sandboxDir,
 		FileInfo: fileInfo,
+		workDir:  path.Join(sandboxDir, sandboxWorkDir),
+		upperDir: path.Join(sandboxDir, sandboxUpperDir),
+		mountDir: path.Join(sandboxDir, sandboxMountPointDir),
 	}, nil
 }
 
 func CreateOverlay(sandboxDir string) (*OverlayFs, error) {
-	if err := createDirIfNotExists(sandboxDir); err != nil {
-		return nil, err
-	}
-
-	rootFsPath := path.Join(sandboxDir, sandboxMountPointDir)
-	upperDirPath := path.Join(sandboxDir, sandboxUpperDir)
-	workDirPath := path.Join(sandboxDir, sandboxWorkDir)
-
-	if err := createDirIfNotExists(rootFsPath); err != nil {
-		return nil, err
-	}
-
-	if err := createDirIfNotExists(upperDirPath); err != nil {
-		return nil, err
-	}
-
-	if err := createDirIfNotExists(workDirPath); err != nil {
+	if err := helper.CreateDirIfNotExists(sandboxDir); err != nil {
 		return nil, err
 	}
 
 	// write a default config file
 	config := OverlayFsInfo{
-		StagedFiles:  []string{},
-		ChangedFiles: []string{},
+		StagedFiles: []string{},
 	}
 
 	configFilePath := path.Join(sandboxDir, sandboxConfigFileName)
@@ -102,22 +88,85 @@ func CreateOverlay(sandboxDir string) (*OverlayFs, error) {
 	return OpenOverlay(sandboxDir)
 }
 
-func UnmountOverlay(mountDir string) error {
-	return syscall.Unmount(mountDir, 0)
+func (m *OverlayFs) mountOverlayFs(lower string) error {
+	opts := fmt.Sprintf(
+		"lowerdir=%s,upperdir=%s,workdir=%s,userxattr",
+		lower,
+		path.Join(m.upperDir, lower),
+		path.Join(m.workDir, lower),
+	)
+
+	mountPoint := path.Join(m.GetMountPath(), lower)
+	_ = os.MkdirAll(mountPoint, 0755)
+	_ = os.MkdirAll(path.Join(m.upperDir, lower), 0755)
+	_ = os.MkdirAll(path.Join(m.workDir, lower), 0755)
+
+	if err := syscall.Mount("overlay", mountPoint, "overlay", 0, opts); err != nil {
+		return fmt.Errorf("failed to mount %s to %s: %s\n", lower, mountPoint, err)
+	}
+
+	m.mountedPaths = append(m.mountedPaths, mountPoint)
+	return nil
+}
+
+func (m *OverlayFs) mountRecursive(mounts []helper.MountInfo) error {
+	for _, mount := range mounts {
+		if mount.Source == "none" {
+			continue
+		}
+
+		if err := m.mountOverlayFs(mount.Target); err != nil {
+			return fmt.Errorf("failed to mount overlay fs: %w", err)
+		}
+
+		if mount.Children != nil {
+			if err := m.mountRecursive(*mount.Children); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *OverlayFs) Mount() error {
-	opts := fmt.Sprintf(
-		"lowerdir=%s,upperdir=%s,workdir=%s,userxattr",
-		sandboxLowerDir,
-		path.Join(s.BaseDir, sandboxUpperDir),
-		path.Join(s.BaseDir, sandboxWorkDir),
-	)
-	return syscall.Mount("overlay", s.GetMountPath(), "overlay", 0, opts)
+	if err := helper.CreateDirIfNotExists(s.mountDir); err != nil {
+		return fmt.Errorf("failed to create mount dir: %w", err)
+	}
+
+	if err := helper.CreateDirIfNotExists(s.upperDir); err != nil {
+		return fmt.Errorf("failed to create upper dir: %w", err)
+	}
+
+	if err := helper.CreateDirIfNotExists(s.workDir); err != nil {
+		return fmt.Errorf("failed to create work dir: %w", err)
+	}
+	allMounts, err := helper.FindAllMounts()
+	if err != nil {
+		return fmt.Errorf("failed to find all mounts: %w", err)
+	}
+	return s.mountRecursive(allMounts)
 }
 
 func (s *OverlayFs) UnMount() error {
-	return syscall.Unmount(s.GetMountPath(), 0)
+	// sort the mounted paths by length, so that we unmount the deepest path first
+	sort.Slice(s.mountedPaths, func(i, j int) bool {
+		iPath := s.mountedPaths[i]
+		jPath := s.mountedPaths[j]
+		iParts := strings.Split(iPath, string(os.PathSeparator))
+		jParts := strings.Split(jPath, string(os.PathSeparator))
+		return len(iParts) > len(jParts)
+	})
+
+	for _, mountPoint := range s.mountedPaths {
+		if err := syscall.Unmount(mountPoint, 0); err != nil {
+			fmt.Printf("failed to unmount %s: %s\n", mountPoint, err)
+		}
+	}
+
+	if err := os.RemoveAll(s.mountDir); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *OverlayFs) CommitToDisk() error {
