@@ -52,13 +52,17 @@ tar -xzf "${TMP_DIR}/sandbox.tar.gz" -C "$TMP_DIR"
 # Assuming the binary is named 'sandbox' and is located in the root of the tar directory.
 chmod +x "${TMP_DIR}/sandbox"
 
-echo "Installing sandbox to /usr/local/bin - you might be prompted for your password."
+echo "Installing sandbox to /usr/local/bin."
 # Move the binary to a location in the user's PATH.
 
 if [ "$(id -u)" -eq 0 ]; then
     mv "${TMP_DIR}/sandbox" /usr/local/bin/sandbox
+    chown root:root /usr/local/bin/sandbox
+    chmod u+s /usr/local/bin/sandbox
 else
     sudo mv "${TMP_DIR}/sandbox" /usr/local/bin/sandbox
+    sudo chown root:root /usr/local/bin/sandbox
+    sudo chmod u+s /usr/local/bin/sandbox
 fi
 
 # Cleanup the temporary directory.
@@ -67,6 +71,9 @@ rm -rf "$TMP_DIR"
 # Verify that installation was successful.
 if command -v sandbox >/dev/null 2>&1; then
     echo "Installation successful. You can now run 'sandbox' from the command line."
+    echo "$ sandbox --help"
+    echo "warning: sandbox is a setuid binary."
+    exit 0
 else
     echo "Error: sandbox was not installed correctly."
     exit 1
