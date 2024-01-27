@@ -15,7 +15,8 @@ const (
 )
 
 type Sandbox struct {
-	overlayFs *OverlayFs
+	overlayFs     *OverlayFs
+	specialMounts *SpecialMount
 }
 
 type SandboxParams struct {
@@ -31,10 +32,17 @@ type SandboxParams struct {
 func CreateSandboxAt(sandboxBaseDir string) (*Sandbox, error) {
 	overlay, err := CreateOverlay(sandboxBaseDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create overlay: %w", err)
 	}
+
+	specialMounts, err := CreateSpecialMounts(overlay.GetMountPath())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create special mounts: %w", err)
+	}
+
 	return &Sandbox{
-		overlayFs: overlay,
+		overlayFs:     overlay,
+		specialMounts: specialMounts,
 	}, nil
 }
 
@@ -54,10 +62,17 @@ func CreateSandbox() (*Sandbox, error) {
 func LoadSandboxFrom(sandboxBaseDir string) (*Sandbox, error) {
 	overlay, err := OpenOverlay(sandboxBaseDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open overlay: %w", err)
 	}
+
+	specialMounts, err := CreateSpecialMounts(overlay.GetMountPath())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create special mounts: %w", err)
+	}
+
 	sandbox := &Sandbox{
-		overlayFs: overlay,
+		overlayFs:     overlay,
+		specialMounts: specialMounts,
 	}
 	return sandbox, nil
 }
@@ -72,11 +87,26 @@ func (s *Sandbox) LoadSandbox(sandboxId string) (*Sandbox, error) {
 }
 
 func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int, err error) {
-	// todo mount devices
-	currentWorkingDir := "/"
-	if workDir, err := os.Getwd(); err == nil {
-		currentWorkingDir = workDir
+	// todo mount devices'
+	if err := s.overlayFs.Mount(); err != nil {
+		return 0, fmt.Errorf("failed to mount overlay: %w", err)
 	}
+	defer s.overlayFs.UnMount()
+
+	if err := s.specialMounts.Mount(); err != nil {
+		return 0, fmt.Errorf("failed to mount special mounts: %w", err)
+	}
+	defer func() {
+		err := s.specialMounts.Unmount()
+		if err != nil {
+			fmt.Println("failed to unmount special mounts:", err)
+		}
+	}()
+
+	currentWorkingDir := "/"
+	// if workDir, err := os.Getwd(); err == nil {
+	// 	currentWorkingDir = workDir
+	// }
 
 	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("cd \"%s\" && %s", currentWorkingDir, command))
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -101,7 +131,7 @@ func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int,
 		},
 
 		GidMappingsEnableSetgroups: params.AllowChangeUserId, // enable su command
-		// Chroot:                     s.overlayFs.GetRootFsPath(),
+		Chroot:                     s.overlayFs.GetMountPath(),
 	}
 
 	if !params.AllowNetwork {
@@ -121,7 +151,8 @@ func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int,
 }
 
 func (s *Sandbox) DeleteSandbox() error {
-	_ = s.overlayFs.Destroy()
+	_ = s.overlayFs.UnMount()
+	_ = s.specialMounts.Unmount()
 	return os.RemoveAll(s.overlayFs.BaseDir)
 }
 

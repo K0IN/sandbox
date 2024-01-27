@@ -2,8 +2,10 @@ package sandbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
+	"syscall"
 )
 
 const (
@@ -11,6 +13,7 @@ const (
 	sandboxUpperDir       = "upper"
 	sandboxWorkDir        = "workdir"
 	sandboxMountPointDir  = "rootfs"
+	sandboxLowerDir       = "/"
 )
 
 type OverlayFsInfo struct {
@@ -99,18 +102,25 @@ func CreateOverlay(sandboxDir string) (*OverlayFs, error) {
 	return OpenOverlay(sandboxDir)
 }
 
-func (s *OverlayFs) Mount() error {
-	// todo
-	return nil
+func UnmountOverlay(mountDir string) error {
+	return syscall.Unmount(mountDir, 0)
 }
 
-func (s *OverlayFs) Destroy() error {
-	// todo
-	return nil
+func (s *OverlayFs) Mount() error {
+	opts := fmt.Sprintf(
+		"lowerdir=%s,upperdir=%s,workdir=%s,userxattr",
+		sandboxLowerDir,
+		path.Join(s.BaseDir, sandboxUpperDir),
+		path.Join(s.BaseDir, sandboxWorkDir),
+	)
+	return syscall.Mount("overlay", s.GetMountPath(), "overlay", 0, opts)
+}
+
+func (s *OverlayFs) UnMount() error {
+	return syscall.Unmount(s.GetMountPath(), 0)
 }
 
 func (s *OverlayFs) CommitToDisk() error {
-
 	return nil
 }
 
@@ -130,6 +140,6 @@ func (s *OverlayFs) GetChangedFiles() ([]string, error) {
 	return nil, nil
 }
 
-func (s *OverlayFs) GetRootFsPath() string {
+func (s *OverlayFs) GetMountPath() string {
 	return path.Join(s.BaseDir, sandboxMountPointDir)
 }
