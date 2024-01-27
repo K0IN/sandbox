@@ -8,7 +8,7 @@ import (
 )
 
 type SpecialMount struct {
-	rootFsPath string
+	mountPath string
 
 	MountProc bool
 	MountDev  bool
@@ -16,7 +16,7 @@ type SpecialMount struct {
 	DevicesToMount []string
 }
 
-func CreateSpecialMounts(rootFsPath string) (*SpecialMount, error) {
+func CreateSpecialMounts(mountPath string) (*SpecialMount, error) {
 	return &SpecialMount{
 		MountProc: true,
 		MountDev:  true,
@@ -28,19 +28,19 @@ func CreateSpecialMounts(rootFsPath string) (*SpecialMount, error) {
 			"random",
 			"urandom",
 		},
-		rootFsPath: rootFsPath,
+		mountPath: mountPath,
 	}, nil
 }
 
 func (s *SpecialMount) Mount() error {
 	if s.MountProc {
-		if err := MountProc(s.rootFsPath); err != nil {
+		if err := MountProc(s.mountPath); err != nil {
 			return err
 		}
 	}
 
 	if s.MountDev {
-		if err := mountDevices(s.rootFsPath, s.DevicesToMount); err != nil {
+		if err := mountDevices(s.mountPath, s.DevicesToMount); err != nil {
 			return err
 		}
 	}
@@ -50,17 +50,16 @@ func (s *SpecialMount) Mount() error {
 
 func (s *SpecialMount) Unmount() error {
 	if s.MountProc {
-		if err := UnmountProc(s.rootFsPath); err != nil {
+		if err := UnmountProc(s.mountPath); err != nil {
 			return fmt.Errorf("failed to unmount proc: %w", err)
 		}
 	}
 
 	if s.MountDev {
-		if err := UnmountDevices(s.rootFsPath, s.DevicesToMount); err != nil {
+		if err := UnmountDevices(s.mountPath, s.DevicesToMount); err != nil {
 			return fmt.Errorf("failed to unmount dev: %w", err)
 		}
 	}
-
 	return nil
 }
 
@@ -68,25 +67,16 @@ func mountDevices(rootFsPath string, devicesToMount []string) error {
 	devPath := path.Join(rootFsPath, "dev")
 
 	_ = os.RemoveAll(devPath)
-	if err := os.MkdirAll(devPath, 0755); err != nil {
+	if err := os.MkdirAll(devPath, 0666); err != nil {
 		return err
 	}
 
-	for _, deviceName := range devicesToMount {
-		dst := path.Join(devPath, deviceName)
-
-		_ = os.RemoveAll(dst)
-		if _, err := os.Create(dst); err != nil {
-			continue
-		}
-
-		if err := syscall.Mount(path.Join("/dev", deviceName), dst, "", syscall.MS_BIND, ""); err != nil {
-			continue
-		}
+	if err := syscall.Mount("devtmpfs", devPath, "devtmpfs", 0, ""); err != nil {
+		return err
 	}
 
 	ptsPath := path.Join(rootFsPath, "dev", "pts")
-	if err := os.MkdirAll(ptsPath, 0755); err != nil {
+	if err := os.MkdirAll(ptsPath, 0666); err != nil {
 		return err
 	}
 
@@ -102,13 +92,14 @@ func UnmountDevices(rootFsPath string, devicesToUnmount []string) error {
 		fmt.Printf("failed to unmount devpts: %s\n", err)
 	}
 
-	for _, deviceName := range devicesToUnmount {
-		if err := syscall.Unmount(path.Join(rootFsPath, "dev", deviceName), 0); err != nil {
-			fmt.Printf("failed to unmount %s: %s\n", deviceName, err)
-		}
+	if err := syscall.Unmount(path.Join(rootFsPath, "dev"), 0); err != nil {
+		fmt.Printf("failed to unmount devtmpfs: %s\n", err)
 	}
 
-	return os.RemoveAll(path.Join(rootFsPath, "dev"))
+	if err := os.RemoveAll(path.Join(rootFsPath, "dev")); err != nil {
+		fmt.Printf("failed to remove dev: %s\n", err)
+	}
+	return nil
 }
 
 func MountProc(rootFsPath string) error {
@@ -121,6 +112,14 @@ func MountProc(rootFsPath string) error {
 
 func UnmountProc(rootFsPath string) error {
 	procPath := path.Join(rootFsPath, "proc")
-	_ = syscall.Unmount(procPath, 0)
-	return os.RemoveAll(procPath)
+	err := syscall.Unmount(procPath, 0)
+	if err != nil {
+		fmt.Printf("failed to unmount proc: %s\n", err)
+	}
+
+	if err := os.RemoveAll(procPath); err != nil {
+		fmt.Printf("failed to remove proc: %s\n", err)
+	}
+
+	return nil
 }
