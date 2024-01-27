@@ -35,7 +35,7 @@ func CreateSandboxAt(sandboxBaseDir string) (*Sandbox, error) {
 		return nil, fmt.Errorf("failed to create overlay: %w", err)
 	}
 
-	specialMounts, err := CreateSpecialMounts(overlay.upperDir)
+	specialMounts, err := CreateSpecialMounts(overlay.mountDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create special mounts: %w", err)
 	}
@@ -102,7 +102,7 @@ func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int,
 		currentWorkingDir = workDir
 	}
 
-	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("cd \"%s\" ; hostname sandbox; %s", currentWorkingDir, command))
+	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("cd \"%s\" ; %s", currentWorkingDir, command))
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWUSER,
 		UidMappings: []syscall.SysProcIDMap{
@@ -128,13 +128,13 @@ func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int,
 		Chroot:                     s.overlayFs.GetMountPath(),
 	}
 
-	if !params.AllowNetwork {
-		cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWNET
-	}
+	// if !params.AllowNetwork {
+	// 	cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWNET
+	// }
 
-	if params.AllowEnv {
-		cmd.Env = os.Environ()
-	}
+	//if params.AllowEnv {
+	cmd.Env = os.Environ()
+	// }
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
