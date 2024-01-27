@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"myapp/helper"
 	"myapp/sandbox"
 
@@ -23,7 +24,8 @@ func GetTryCommandParser(parser *argparse.Parser) (tryCommand *argparse.Command,
 		AllowNetwork: tryCommand.Flag("n", "network", &argparse.Options{Required: false, Default: false, Help: "Allow network"}),
 		AllowEnv:     tryCommand.Flag("e", "env", &argparse.Options{Required: false, Default: false, Help: "Allow environment variables"}),
 		Persist:      tryCommand.Flag("p", "persist", &argparse.Options{Required: false, Default: true, Help: "Persist the sandbox, else it will be deleted after the sandbox is exited"}),
-		Command:      tryCommand.StringPositional(&argparse.Options{Required: false, Default: helper.GetPrimaryShell(), Help: "The command to execute inside the sandbox, default is the primary shell"}),
+		// AsRootUser:   tryCommand.Flag("r", "root", &argparse.Options{Required: false, Default: false, Help: "Run the command as root user"}),
+		Command: tryCommand.StringPositional(&argparse.Options{Required: false, Default: helper.GetPrimaryShell(), Help: "The command to execute inside the sandbox, default is the primary shell"}),
 	}
 }
 
@@ -33,13 +35,17 @@ func ExecuteTryCommand(args TryCommandArguments) (int, error) {
 		return 0, err
 	}
 
-	resultCode, err := sb.Execute("ls", sandbox.SandboxParams{
+	resultCode, path, err := sb.Execute("/bin/bash", sandbox.SandboxParams{
 		AllowNetwork:      true,
 		AllowEnv:          true,
-		UserId:            1000,
-		GroupId:           1000,
+		UserId:            0,
+		GroupId:           0,
 		AllowChangeUserId: true,
 	})
+
+	if err == nil {
+		fmt.Printf("Sandbox created at %s\n", path)
+	}
 
 	return resultCode, err
 }
