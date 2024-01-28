@@ -102,7 +102,7 @@ func (m *OverlayFs) mountOverlayFs(lower string) error {
 	_ = os.MkdirAll(path.Join(m.workDir, lower), 0755)
 
 	if err := syscall.Mount("overlay", mountPoint, "overlay", 0, opts); err != nil {
-		return fmt.Errorf("failed to mount %s to %s: %s\n", lower, mountPoint, err)
+		return fmt.Errorf("failed to mount %s to %s: %s", lower, mountPoint, err)
 	}
 
 	m.mountedPaths = append(m.mountedPaths, mountPoint)
