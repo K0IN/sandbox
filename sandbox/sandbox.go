@@ -20,7 +20,6 @@ type Sandbox struct {
 }
 
 type SandboxParams struct {
-	// todo
 	AllowNetwork bool
 	AllowEnv     bool
 	// user mode
@@ -77,7 +76,7 @@ func LoadSandboxFrom(sandboxBaseDir string) (*Sandbox, error) {
 	return sandbox, nil
 }
 
-func (s *Sandbox) LoadSandbox(sandboxId string) (*Sandbox, error) {
+func LoadSandbox(sandboxId string) (*Sandbox, error) {
 	userDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -86,14 +85,16 @@ func (s *Sandbox) LoadSandbox(sandboxId string) (*Sandbox, error) {
 	return LoadSandboxFrom(sandboxDir)
 }
 
-func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int, sandboxDir string, err error) {
+func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int, err error) {
 	if err := s.overlayFs.Mount(); err != nil {
-		return 0, "", fmt.Errorf("failed to mount overlay: %w", err)
+		return 0, fmt.Errorf("failed to mount overlay: %w", err)
 	}
 	defer s.overlayFs.UnMount()
 
+	// todo write resolv.conf -> im not sure wsl needs this but my linux machine does not
+
 	if err := s.specialMounts.Mount(); err != nil {
-		return 0, "", fmt.Errorf("failed to mount special mounts: %w", err)
+		return 0, fmt.Errorf("failed to mount special mounts: %w", err)
 	}
 	defer s.specialMounts.Unmount()
 
@@ -128,23 +129,23 @@ func (s *Sandbox) Execute(command string, params SandboxParams) (returnCode int,
 		Chroot:                     s.overlayFs.GetMountPath(),
 	}
 
-	// if !params.AllowNetwork {
-	// 	cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWNET
-	// }
+	if !params.AllowNetwork {
+		cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWNET
+	}
 
-	//if params.AllowEnv {
-	cmd.Env = os.Environ()
-	// }
+	if params.AllowEnv {
+		cmd.Env = os.Environ()
+	}
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
 
-	return cmd.ProcessState.ExitCode(), s.overlayFs.BaseDir, nil
+	return cmd.ProcessState.ExitCode(), nil
 }
 
-func (s *Sandbox) DeleteSandbox() error {
+func (s *Sandbox) Delete() error {
 	_ = s.overlayFs.UnMount()
 	_ = s.specialMounts.Unmount()
 	return os.RemoveAll(s.overlayFs.BaseDir)
@@ -152,4 +153,8 @@ func (s *Sandbox) DeleteSandbox() error {
 
 func (s *Sandbox) GetOverlay() *OverlayFs {
 	return s.overlayFs
+}
+
+func (s *Sandbox) GetPath() string {
+	return s.overlayFs.BaseDir
 }

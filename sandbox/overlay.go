@@ -112,7 +112,7 @@ func (m *OverlayFs) mountOverlayFs(lower string) error {
 func (m *OverlayFs) mountRecursive(mounts []helper.MountInfo) error {
 	for _, mount := range mounts {
 		if err := m.mountOverlayFs(mount.Target); err != nil {
-			return fmt.Errorf("failed to mount overlay fs: %w", err)
+			fmt.Printf("failed to mount overlay fs: %s\n", err)
 		}
 
 		if mount.Children != nil {
