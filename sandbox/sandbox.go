@@ -45,6 +45,27 @@ func CreateSandboxAt(sandboxBaseDir string) (*Sandbox, error) {
 	}, nil
 }
 
+func ListSandboxes() ([]string, error) {
+	userDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	sandboxesDir := path.Join(userDir, sandboxDirName)
+
+	files, err := os.ReadDir(sandboxesDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var sandboxes []string
+	for _, file := range files {
+		if file.IsDir() {
+			sandboxes = append(sandboxes, file.Name())
+		}
+	}
+	return sandboxes, nil
+}
+
 func CreateSandbox() (*Sandbox, error) {
 	sandboxId, err := nanoid.New(6)
 	if err != nil {

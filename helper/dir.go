@@ -1,6 +1,8 @@
 package helper
 
-import "os"
+import (
+	"os"
+)
 
 func CreateDirIfNotExists(dirPath string) error {
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {

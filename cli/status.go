@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"myapp/sandbox"
+
 	"github.com/akamensky/argparse"
 )
 
@@ -17,5 +19,26 @@ func GetStatusCommandParser(parser *argparse.Parser) (statusCommand *argparse.Co
 }
 
 func ExecuteStatusCommand(statusCommandArgs StatusCommandArguments) error {
-	return nil // todo
+	sb, err := sandbox.LoadSandbox(*statusCommandArgs.sandboxId)
+	if err != nil {
+		return err
+	}
+
+	overlay := sb.GetOverlay()
+	changedFiles, _ := overlay.GetChangedFiles()
+
+	if len(changedFiles) == 0 {
+		println("no changes")
+		return nil
+	}
+
+	for _, changedFile := range changedFiles {
+		if overlay.IsStaged(changedFile) {
+			println("staged: " + changedFile)
+		} else {
+			println("not staged: " + changedFile)
+		}
+	}
+
+	return nil
 }

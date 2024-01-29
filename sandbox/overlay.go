@@ -6,6 +6,7 @@ import (
 	"myapp/helper"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -182,7 +183,41 @@ func (s *OverlayFs) GetStagedFiles() ([]string, error) {
 }
 
 func (s *OverlayFs) GetChangedFiles() ([]string, error) {
-	return nil, nil
+	allChangedFiles := []string{}
+	// walk the upper dir and find all files that are not in the lower dir
+	err := filepath.Walk(s.upperDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			relativePath, err := filepath.Rel(s.upperDir, path)
+			if err != nil {
+				return err
+			}
+
+			allChangedFiles = append(allChangedFiles, relativePath)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return allChangedFiles, nil
+}
+
+func (s *OverlayFs) IsStaged(filePath string) bool {
+	stagedFiles, err := s.GetStagedFiles()
+	if err != nil {
+		return false
+	}
+	for _, stagedFile := range stagedFiles {
+		if filePath == stagedFile {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *OverlayFs) GetMountPath() string {
