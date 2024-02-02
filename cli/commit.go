@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"fmt"
+	"myapp/helper"
+	"myapp/sandbox"
+
 	"github.com/akamensky/argparse"
 )
 
@@ -18,5 +22,14 @@ func GetCommitCommandParser(parser *argparse.Parser) (commitCommand *argparse.Co
 }
 
 func ExecuteCommitCommand(statusCommandArgs CommitCommandArguments) error {
-	return nil // todo
+	sb, err := sandbox.LoadSandbox(*statusCommandArgs.sandboxId)
+	if err != nil {
+		return fmt.Errorf("failed to load sandbox: %w", err)
+	}
+
+	overlayFs := sb.GetOverlay()
+	if *statusCommandArgs.yes || helper.Confirm("Are you sure you want to commit?") {
+		return overlayFs.CommitToDisk()
+	}
+	return fmt.Errorf("commit aborted")
 }

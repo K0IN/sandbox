@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"fmt"
+	"myapp/sandbox"
+	"path/filepath"
+
 	"github.com/akamensky/argparse"
 )
 
@@ -20,5 +24,32 @@ func GetAddCommandParser(parser *argparse.Parser) (addCommand *argparse.Command,
 }
 
 func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
-	return nil // todo
+	sb, err := sandbox.LoadSandbox(*statusCommandArgs.sandboxId)
+	if err != nil {
+		return fmt.Errorf("failed to load sandbox: %w", err)
+	}
+
+	overlay := sb.GetOverlay()
+	// first we get all the changed files
+	changedFiles, err := overlay.GetChangedFiles()
+	if err != nil {
+		return err
+	}
+
+	for _, file := range changedFiles {
+		if matched, err := filepath.Match(*statusCommandArgs.fileSelector, file); err != nil && matched {
+			if *statusCommandArgs.remove {
+				if err := overlay.UnstageFile(file); err != nil {
+					return err
+				}
+				fmt.Printf("Unstaged %s\n", file)
+			} else {
+				if err := overlay.StageFile(file); err != nil {
+					return err
+				}
+				fmt.Printf("Staged %s\n", file)
+			}
+		}
+	}
+	return nil
 }

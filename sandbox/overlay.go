@@ -29,12 +29,11 @@ type OverlayFs struct {
 	workDir  string
 	upperDir string
 	mountDir string
-	FileInfo OverlayFsInfo
 
 	mountedPaths []string
 }
 
-func writeJsonToFile(data OverlayFsInfo, filePath string) error {
+func writeOverlayInformation(data OverlayFsInfo, filePath string) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -47,25 +46,23 @@ func writeJsonToFile(data OverlayFsInfo, filePath string) error {
 	return nil
 }
 
-func readJsonFromFile(filePath string) OverlayFsInfo {
+func readOverlayInformation(filePath string) (*OverlayFsInfo, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return OverlayFsInfo{}
+		return nil, err
 	}
 	defer file.Close()
 	decoder := json.NewDecoder(file)
 	var fileInfo OverlayFsInfo
 	if err := decoder.Decode(&fileInfo); err != nil {
-		return OverlayFsInfo{}
+		return nil, err
 	}
-	return fileInfo
+	return &fileInfo, nil
 }
 
 func OpenOverlay(sandboxDir string) (*OverlayFs, error) {
-	fileInfo := readJsonFromFile(path.Join(sandboxDir, sandboxConfigFileName))
 	return &OverlayFs{
 		BaseDir:  sandboxDir,
-		FileInfo: fileInfo,
 		workDir:  path.Join(sandboxDir, sandboxWorkDir),
 		upperDir: path.Join(sandboxDir, sandboxUpperDir),
 		mountDir: path.Join(sandboxDir, sandboxMountPointDir),
@@ -83,7 +80,7 @@ func CreateOverlay(sandboxDir string) (*OverlayFs, error) {
 	}
 
 	configFilePath := path.Join(sandboxDir, sandboxConfigFileName)
-	if err := writeJsonToFile(config, configFilePath); err != nil {
+	if err := writeOverlayInformation(config, configFilePath); err != nil {
 		return nil, err
 	}
 	return OpenOverlay(sandboxDir)
@@ -167,19 +164,67 @@ func (s *OverlayFs) UnMount() error {
 }
 
 func (s *OverlayFs) CommitToDisk() error {
+	stagedFiles, err := s.GetStagedFiles()
+	if err != nil {
+		return err
+	}
+
+	for _, stagedFile := range stagedFiles {
+		upperFilePath := path.Join(s.upperDir, stagedFile)
+		lowerFilePath := path.Join(sandboxLowerDir, stagedFile)
+
+		// copy the file from upper to lower
+		if err := helper.CopyFile(upperFilePath, lowerFilePath); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (s *OverlayFs) StageFile(filePath string) error {
-	return nil
+	stagedFiles, err := s.GetStagedFiles()
+	if err != nil {
+		return err
+	}
+
+	// check if the file is already staged
+	if s.IsStaged(filePath) {
+		return nil
+	}
+
+	stagedFiles = append(stagedFiles, filePath)
+
+	return writeOverlayInformation(OverlayFsInfo{StagedFiles: stagedFiles}, path.Join(s.BaseDir, sandboxConfigFileName))
 }
 
 func (s *OverlayFs) UnstageFile(filePath string) error {
-	return nil
+	// remove the file from the staged files
+	stagedFiles, err := s.GetStagedFiles()
+	if err != nil {
+		return err
+	}
+
+	newStagedFiles := []string{}
+	for _, stagedFile := range stagedFiles {
+		if stagedFile != filePath {
+			newStagedFiles = append(newStagedFiles, stagedFile)
+		}
+	}
+
+	fileInfo := &OverlayFsInfo{
+		StagedFiles: newStagedFiles,
+	}
+	configFilePath := path.Join(s.BaseDir, sandboxConfigFileName)
+	return writeOverlayInformation(*fileInfo, configFilePath)
 }
 
 func (s *OverlayFs) GetStagedFiles() ([]string, error) {
-	return nil, nil
+	fileInfo, err := readOverlayInformation(path.Join(s.BaseDir, sandboxConfigFileName))
+	if err != nil {
+		return nil, err
+	}
+	return fileInfo.StagedFiles, nil
 }
 
 func (s *OverlayFs) GetChangedFiles() ([]string, error) {
