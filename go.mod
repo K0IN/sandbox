@@ -7,4 +7,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.0.0
 )
 
-require github.com/sergi/go-diff v1.3.1 // indirect
+require (
+	github.com/hexops/gotextdiff v1.0.3 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
+)

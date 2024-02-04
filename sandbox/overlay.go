@@ -268,3 +268,7 @@ func (s *OverlayFs) IsStaged(filePath string) bool {
 func (s *OverlayFs) GetMountPath() string {
 	return path.Join(s.BaseDir, sandboxMountPointDir)
 }
+
+func (s *OverlayFs) GetFsPathForFile(filePath string) string {
+	return path.Join(s.upperDir, filePath)
+}

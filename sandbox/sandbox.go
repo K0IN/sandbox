@@ -34,7 +34,7 @@ func CreateSandboxAt(sandboxBaseDir string) (*Sandbox, error) {
 		return nil, fmt.Errorf("failed to create overlay: %w", err)
 	}
 
-	specialMounts, err := CreateSpecialMounts(overlay.mountDir)
+	specialMounts, err := CreateSpecialMounts(overlay.GetMountPath(), overlay.upperDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create special mounts: %w", err)
 	}
@@ -85,7 +85,7 @@ func LoadSandboxFrom(sandboxBaseDir string) (*Sandbox, error) {
 		return nil, fmt.Errorf("failed to open overlay: %w", err)
 	}
 
-	specialMounts, err := CreateSpecialMounts(overlay.GetMountPath())
+	specialMounts, err := CreateSpecialMounts(overlay.GetMountPath(), overlay.upperDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create special mounts: %w", err)
 	}

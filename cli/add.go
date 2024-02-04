@@ -37,7 +37,7 @@ func ExecuteAddCommand(statusCommandArgs AddCommandArguments) error {
 	}
 
 	for _, file := range changedFiles {
-		if matched, err := filepath.Match(*statusCommandArgs.fileSelector, file); err != nil && matched {
+		if matched, err := filepath.Match(*statusCommandArgs.fileSelector, file); err == nil && matched {
 			if *statusCommandArgs.remove {
 				if err := overlay.UnstageFile(file); err != nil {
 					return err

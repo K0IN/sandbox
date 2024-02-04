@@ -9,6 +9,7 @@ import (
 
 type SpecialMount struct {
 	mountPath string
+	upperPath string
 
 	MountProc bool
 	MountDev  bool
@@ -16,7 +17,7 @@ type SpecialMount struct {
 	DevicesToMount []string
 }
 
-func CreateSpecialMounts(mountPath string) (*SpecialMount, error) {
+func CreateSpecialMounts(mountPath, upperPath string) (*SpecialMount, error) {
 	return &SpecialMount{
 		MountProc: true,
 		MountDev:  true,
@@ -29,6 +30,7 @@ func CreateSpecialMounts(mountPath string) (*SpecialMount, error) {
 			"urandom",
 		},
 		mountPath: mountPath,
+		upperPath: upperPath,
 	}, nil
 }
 
@@ -50,13 +52,13 @@ func (s *SpecialMount) Mount() error {
 
 func (s *SpecialMount) Unmount() error {
 	if s.MountProc {
-		if err := UnmountProc(s.mountPath); err != nil {
+		if err := UnmountProc(s.mountPath, s.upperPath); err != nil {
 			return fmt.Errorf("failed to unmount proc: %w", err)
 		}
 	}
 
 	if s.MountDev {
-		if err := UnmountDevices(s.mountPath, s.DevicesToMount); err != nil {
+		if err := UnmountDevices(s.mountPath, s.upperPath, s.DevicesToMount); err != nil {
 			return fmt.Errorf("failed to unmount dev: %w", err)
 		}
 	}
@@ -87,7 +89,7 @@ func mountDevices(rootFsPath string, devicesToMount []string) error {
 	return nil
 }
 
-func UnmountDevices(rootFsPath string, devicesToUnmount []string) error {
+func UnmountDevices(rootFsPath, upperDir string, devicesToUnmount []string) error {
 	if err := syscall.Unmount(path.Join(rootFsPath, "dev", "pts"), 0); err != nil {
 		fmt.Printf("failed to unmount devpts: %s\n", err)
 	}
@@ -96,9 +98,10 @@ func UnmountDevices(rootFsPath string, devicesToUnmount []string) error {
 		fmt.Printf("failed to unmount devtmpfs: %s\n", err)
 	}
 
-	if err := os.RemoveAll(path.Join(rootFsPath, "dev")); err != nil {
+	if err := os.RemoveAll(path.Join(upperDir, "dev")); err != nil {
 		fmt.Printf("failed to remove dev: %s\n", err)
 	}
+
 	return nil
 }
 
@@ -110,14 +113,14 @@ func MountProc(rootFsPath string) error {
 	return syscall.Mount("proc", procPath, "proc", 0, "")
 }
 
-func UnmountProc(rootFsPath string) error {
+func UnmountProc(rootFsPath, upperDir string) error {
 	procPath := path.Join(rootFsPath, "proc")
-	err := syscall.Unmount(procPath, 0)
-	if err != nil {
+
+	if err := syscall.Unmount(procPath, 0); err != nil {
 		fmt.Printf("failed to unmount proc: %s\n", err)
 	}
 
-	if err := os.RemoveAll(procPath); err != nil {
+	if err := os.RemoveAll(path.Join(upperDir, "proc")); err != nil {
 		fmt.Printf("failed to remove proc: %s\n", err)
 	}
 
