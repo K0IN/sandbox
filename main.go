@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	if os.Geteuid() != 0 || os.Getegid() != 0 {
+	if os.Geteuid() != 0 {
 		fmt.Println("You must run this program as root!")
 		fmt.Printf("Current effective uid: %d, effective gid: %d\n", os.Geteuid(), os.Getegid())
 		fmt.Println("Try running it as suid root or sudo.")
