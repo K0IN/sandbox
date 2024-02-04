@@ -21,7 +21,7 @@ which will install the `sandbox` command to `/usr/local/bin`.
 
 Run a command inside a sandbox:
 
-> sandbox try "<your command>"
+> sandbox try "your command"
 
 Run a interactive shell inside a sandbox:
 
@@ -29,7 +29,7 @@ Run a interactive shell inside a sandbox:
 
 Persist the sandbox:
 
-> sandbox try --persist "<your command>"
+> sandbox try --persist "your command"
 
 Example on what you can do with persist:
 
@@ -77,8 +77,6 @@ LICENSE  VP-XHr  a.txt  cli  go.mod  go.sum  helper  install.sh  main.go  readme
 k0in@K0IN-PC /m/e/s/sandbox (main)> cat a.txt 
 Hello World
 ```
-
-
 
 ## Credits
 
