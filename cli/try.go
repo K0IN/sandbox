@@ -43,7 +43,7 @@ func ExecuteTryCommand(args TryCommandArguments) (int, error) {
 		AllowChangeUserId: true,
 	})
 
-	if err == nil && *args.persist {
+	if *args.persist {
 		path := sb.GetPath()
 		fmt.Printf("Sandbox created at %s\n", path)
 	}
