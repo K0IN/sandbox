@@ -22,9 +22,10 @@ func main() {
 	diffParser, diffArguments := cli.GetDiffCommandParser(parser)
 	statusParser, statusArguments := cli.GetStatusCommandParser(parser)
 	listParser := cli.GetListCommandParser(parser)
-	removeParser, removeArguments := cli.GetRemoveCommandParser(parser)
+	removeParser, removeArguments := cli.GetPruneCommandParser(parser)
 	addParser, addArguments := cli.GetAddCommandParser(parser)
 	commitParser, confirmArguments := cli.GetCommitCommandParser(parser)
+	pruneParser, pruneArguments := cli.GetPruneCommandParser(parser)
 
 	if err := parser.Parse(os.Args); err != nil {
 		fmt.Print(parser.Usage(err))
@@ -41,7 +42,7 @@ func main() {
 			panic(err)
 		}
 	} else if removeParser.Happened() {
-		if err := cli.ExecuteRemoveCommand(removeArguments); err != nil {
+		if err := cli.ExecutePruneCommand(removeArguments); err != nil {
 			panic(err)
 		}
 	} else if tryParser.Happened() {
@@ -56,6 +57,10 @@ func main() {
 		}
 	} else if commitParser.Happened() {
 		if err := cli.ExecuteCommitCommand(confirmArguments); err != nil {
+			panic(err)
+		}
+	} else if pruneParser.Happened() {
+		if err := cli.ExecutePruneCommand(pruneArguments); err != nil {
 			panic(err)
 		}
 	} else {
