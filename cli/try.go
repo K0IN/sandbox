@@ -23,7 +23,7 @@ func GetTryCommandParser(parser *argparse.Parser) (tryCommand *argparse.Command,
 		sandboxId:    tryCommand.String("i", "id", &argparse.Options{Required: false, Default: nil, Help: "Attach to a existing sandbox with the given in to run the command in"}),
 		allowNetwork: tryCommand.Flag("n", "network", &argparse.Options{Required: false, Default: false, Help: "Allow network"}),
 		allowEnv:     tryCommand.Flag("e", "env", &argparse.Options{Required: false, Default: false, Help: "Allow environment variables"}),
-		persist:      tryCommand.Flag("p", "persist", &argparse.Options{Required: false, Default: true, Help: "Persist the sandbox, else it will be deleted after the sandbox is exited"}),
+		persist:      tryCommand.Flag("p", "persist", &argparse.Options{Required: false, Default: false, Help: "Persist the sandbox, else it will be deleted after the sandbox is exited"}),
 		command:      tryCommand.StringPositional(&argparse.Options{Required: false, Default: helper.GetPrimaryShell(), Help: "The command to execute inside the sandbox, default is the primary shell. If your command contains spaces, wrap it in quotes"}),
 	}
 }
