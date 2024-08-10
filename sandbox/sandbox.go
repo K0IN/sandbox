@@ -45,6 +45,14 @@ func CreateSandboxAt(sandboxBaseDir string) (*Sandbox, error) {
 	}, nil
 }
 
+func GetSandboxPathForId(sandboxId string) (string, error) {
+	userDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return path.Join(userDir, sandboxDirName, sandboxId), nil
+}
+
 func ListSandboxes() ([]string, error) {
 	userDir, err := os.UserHomeDir()
 	if err != nil {
